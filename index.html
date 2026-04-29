@@ -306,6 +306,7 @@
       const [weights, setWeights] = useState({});
       const [types, setTypes] = useState({});   // { "Day 1||Back Squat": "bb" | "db" | "bw" | null }
       const [expandedCue, setExpandedCue] = useState(null);
+      const [collapsedSections, setCollapsedSections] = useState({});
       const [saveStatus, setSaveStatus] = useState("");
       const [syncStatus, setSyncStatus] = useState("idle");
       const [importStatus, setImportStatus] = useState("idle");
@@ -497,7 +498,7 @@
       const workingExercises = exercises.filter(e => e.section !== "WARM UP");
       const loggedCount = workingExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").length;
       const progressLabel = `${loggedCount}/${workingExercises.length}`;
-      const activeWeekLabel = activeWeek === "W5 (Deload)" ? "W5" : activeWeek;
+      const activeWeekLabel = `Week ${activeWeek.match(/\d+/)?.[0] || ""}`.trim();
 
       const syncStyles = {
         idle:    { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: cloudUser ? "SYNC CLOUD" : "CLOUD LOCKED" },
@@ -526,11 +527,10 @@
           <div style={{ background: "rgba(0,0,0,0.94)", borderBottom: `1px solid ${UI.border}`, padding: "20px 16px 18px", position: "sticky", top: 0, zIndex: 10 }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                <div style={{ fontFamily: UI.displayFont, fontSize: 52, lineHeight: 0.86, letterSpacing: "-0.06em", color: UI.display }}>{activeDay.replace("Day ", "D")}</div>
+                <div style={{ fontFamily: UI.displayFont, fontSize: 44, lineHeight: 0.9, letterSpacing: "-0.06em", color: UI.display }}>PHASE 1</div>
                 <div style={{ paddingTop: 2 }}>
-                  <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary }}>PHASE 1 TRACKER</div>
-                  <div style={{ fontSize: 24, lineHeight: 1.08, letterSpacing: "-0.03em", color: UI.display, marginTop: 3 }}>{activeWeekLabel} / {progressLabel}</div>
-                  <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: UI.disabled, marginTop: 5 }}>WORKING SETS LOGGED</div>
+                  <div style={{ fontSize: 24, lineHeight: 1.08, letterSpacing: "-0.03em", color: UI.display, marginTop: 3 }}>{activeWeekLabel}</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: UI.disabled, marginTop: 7 }}>{progressLabel} WORKING SETS LOGGED</div>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: "column" }}>
@@ -617,17 +617,38 @@
             {sections.map(section => {
               const sectionExercises = exercises.filter(e => e.section === section);
               const color = SECTION_COLORS[section] || "#888";
+              const sectionLoggedCount = sectionExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").length;
+              const isWarmUp = section === "WARM UP";
+              const isWarmUpComplete = isWarmUp && sectionExercises.length > 0 && sectionLoggedCount === sectionExercises.length;
+              const isCollapsed = isWarmUp && (collapsedSections[section] ?? isWarmUpComplete);
               return (
                 <div key={section} style={{ marginBottom: 32 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+                  <button
+                    onClick={() => isWarmUp && setCollapsedSections(prev => ({ ...prev, [section]: !isCollapsed }))}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      marginBottom: isCollapsed ? 0 : 12,
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: isWarmUp ? "pointer" : "default",
+                      textAlign: "left",
+                    }}
+                  >
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 8, height: 8, background: color, borderRadius: 99 }} />
                       <span style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary }}>{section}</span>
                     </div>
-                    <span style={{ fontFamily: UI.mono, fontSize: 10, letterSpacing: "0.08em", color: UI.disabled }}>{sectionExercises.length} ITEMS</span>
-                  </div>
+                    <span style={{ fontFamily: UI.mono, fontSize: 10, letterSpacing: "0.08em", color: UI.disabled }}>
+                      {isWarmUp ? `${sectionLoggedCount}/${sectionExercises.length} ${isCollapsed ? "OPEN" : "CLOSE"}` : `${sectionExercises.length} ITEMS`}
+                    </span>
+                  </button>
 
-                  {sectionExercises.map(ex => {
+                  {!isCollapsed && sectionExercises.map(ex => {
                     const wVal = getVal(activeDay, ex.name, "weight");
                     const cVal = getVal(activeDay, ex.name, "comment");
                     const exType = getType(activeDay, ex.name);

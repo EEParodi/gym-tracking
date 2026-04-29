@@ -11,7 +11,13 @@ let _sb = null;
 
 function getClient() {
   if (!_sb) {
-    _sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    _sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
   }
   return _sb;
 }
@@ -19,7 +25,13 @@ function getClient() {
 export function initClient(url = SUPABASE_URL, anonKey = SUPABASE_ANON_KEY) {
   // Allow overriding in tests or future env wiring
   if (!_sb) {
-    _sb = createClient(url, anonKey);
+    _sb = createClient(url, anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
   }
   return _sb;
 }
