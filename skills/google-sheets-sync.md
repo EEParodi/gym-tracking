@@ -11,7 +11,7 @@ Manual sync between the app and a Google Sheet via a Google Apps Script Web App.
 
 ### Deployed URL
 ```
-https://script.google.com/macros/s/AKfycbxrs9So7EjKeLQxtDS1dzbVRlT_dbHHj09kH0VvlQkU9_9xI72d_nBGuWVNc2ipBXoO/exec
+https://script.google.com/macros/s/AKfycbwScpvqFwaYR9HvtiJgwHsY7j3DI-LNwN2Z1vs58wiQpSp2ID4l3wnUB8FNT0voGXo2/exec
 ```
 
 ### Script source

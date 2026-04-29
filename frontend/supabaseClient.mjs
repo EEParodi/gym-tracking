@@ -1,5 +1,5 @@
 // Supabase ES Module wrapper for Phase 1 Tracker
-// Minimal login (email/password) and data migration from localStorage to Supabase.
+// Auth helpers plus localStorage <-> Supabase row hydration for Phase 1.
 
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
@@ -29,6 +29,23 @@ export async function signupWithEmail(email, password) {
   return client.auth.signUp({ email, password });
 }
 
+export async function sendMagicLink(email) {
+  const client = getClient();
+  return client.auth.signInWithOtp({ email });
+}
+
+export async function getSession() {
+  const client = getClient();
+  const { data, error } = await client.auth.getSession();
+  return { session: data?.session ?? null, error };
+}
+
+export async function getCurrentUser() {
+  const client = getClient();
+  const { data, error } = await client.auth.getUser();
+  return { user: data?.user ?? null, error };
+}
+
 export async function loginWithEmailPassword(email, password) {
   const client = getClient();
   const { data, error } = await client.auth.signInWithPassword({ email, password });
@@ -40,7 +57,63 @@ export async function logout() {
   return client.auth.signOut();
 }
 
-// Migrate localStorage data to Supabase for the given user_id
+function localStateToRows(weights, types, userId, metaByKey = {}) {
+  const rows = [];
+  const today = new Date().toISOString().split("T")[0];
+
+  for (const [dayKey, weekMap] of Object.entries(weights || {})) {
+    const [day, exercise] = dayKey.split("||");
+    if (!day || !exercise) continue;
+
+    for (const [week, data] of Object.entries(weekMap || {})) {
+      const meta = metaByKey[dayKey] || {};
+      rows.push({
+        user_id: userId,
+        date: today,
+        week,
+        day,
+        section: meta.section ?? data?.section ?? "",
+        exercise,
+        sets: Number.isFinite(Number(meta.sets ?? data?.sets)) ? Number(meta.sets ?? data?.sets) : 0,
+        reps: String(meta.reps ?? data?.reps ?? ""),
+        weight: String(data?.weight ?? ""),
+        type: String(types?.[dayKey] ?? data?.type ?? ""),
+        notes: String(data?.comment ?? data?.notes ?? ""),
+        updated_at: new Date().toISOString(),
+      });
+    }
+  }
+
+  return rows;
+}
+
+function rowsToLocalState(rows) {
+  const weights = {};
+  const types = {};
+
+  for (const row of rows || []) {
+    if (!row?.day || !row?.exercise || !row?.week) continue;
+    const key = `${row.day}||${row.exercise}`;
+    if (!weights[key]) weights[key] = {};
+    weights[key][row.week] = {
+      weight: row.type === "bw" ? "" : String(row.weight ?? ""),
+      comment: String(row.notes ?? ""),
+    };
+    if (row.type) types[key] = row.type;
+  }
+
+  return { weights, types };
+}
+
+export function localStorageStateToRows({ weights, types, userId, metaByKey }) {
+  return localStateToRows(weights, types, userId, metaByKey);
+}
+
+export function rowsToTrackerState(rows) {
+  return rowsToLocalState(rows);
+}
+
+// Migrate localStorage data to Supabase for the given user_id.
 // Returns { migrated, error }
 export async function migrateLocalToSupabase(userId) {
   if (!userId) {
@@ -49,39 +122,33 @@ export async function migrateLocalToSupabase(userId) {
   const client = getClient();
   const weights = JSON.parse(localStorage.getItem("phase1-tracker-v1") || "{}");
   const types = JSON.parse(localStorage.getItem("phase1-types-v1") || "{}");
-  const rows = [];
-  const now = new Date().toISOString();
-  // Build per-week rows with a key that includes the week to avoid clobbering
-  for (const dayKey of Object.keys(weights)) {
-    const weekObj = weights[dayKey] || {};
-    for (const [week, data] of Object.entries(weekObj)) {
-      const [day, exercise] = dayKey.split("||");
-      const newKey = `${dayKey}||${week}`;
-      const value = {
-        day,
-        exercise,
-        week,
-        weight: data?.weight ?? "",
-        comment: data?.comment ?? "",
-        section: "",
-        type: types[dayKey] ?? "",
-      };
-      rows.push({ user_id: userId, key: newKey, value, updated_at: now });
-    }
-  }
+  const rows = localStateToRows(weights, types, userId);
   if (rows.length === 0) {
     return { migrated: 0 };
   }
-  // Upsert by user_id + key to keep per-week entries distinct
-  const { data, error } = await client.from("tracker_data").upsert(rows, { onConflict: ["user_id","key"] });
+  const { data, error } = await client.from("tracker_data").upsert(rows, { onConflict: "user_id,day,exercise,week" });
   return { migrated: rows.length, data, error };
 }
 
 export async function fetchAllDataForUser(userId) {
   if (!userId) return { data: [], error: new Error("Missing userId") };
   const client = getClient();
-  const { data, error } = await client.from("tracker_data").select("key, value").eq("user_id", userId);
+  const { data, error } = await client.from("tracker_data").select("date, week, day, section, exercise, sets, reps, weight, type, notes, updated_at").eq("user_id", userId).order("updated_at", { ascending: true });
   return { data, error };
+}
+
+export async function hydrateTrackerStateFromSupabase(userId) {
+  const { data, error } = await fetchAllDataForUser(userId);
+  if (error) return { weights: {}, types: {}, error };
+  return { ...rowsToLocalState(data), error: null };
+}
+
+export async function upsertTrackerStateToSupabase({ userId, weights, types, metaByKey }) {
+  if (!userId) return { data: null, error: new Error("Missing userId") };
+  const client = getClient();
+  const rows = localStateToRows(weights, types, userId, metaByKey);
+  if (!rows.length) return { data: [], error: null };
+  return client.from("tracker_data").upsert(rows, { onConflict: "user_id,day,exercise,week" });
 }
 
 // Convenience: migrate localStorage if needed and return status
@@ -99,9 +166,16 @@ export const api = {
   initClient,
   loginWithEmailPassword,
   signupWithEmail,
+  sendMagicLink,
+  getSession,
+  getCurrentUser,
   logout,
   migrateLocalToSupabase,
   fetchAllDataForUser,
+  hydrateTrackerStateFromSupabase,
+  upsertTrackerStateToSupabase,
+  localStorageStateToRows,
+  rowsToTrackerState,
   migrateLocalToSupabaseIfNeeded,
 };
 

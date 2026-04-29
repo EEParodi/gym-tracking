@@ -52,8 +52,6 @@
 
     const DAYS = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5 (Optional)"];
     const WEEKS = ["W1", "W2", "W3", "W4", "W5 (Deload)"];
-    const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxrs9So7EjKeLQxtDS1dzbVRlT_dbHHj09kH0VvlQkU9_9xI72d_nBGuWVNc2ipBXoO/exec";
-
     const PROGRAM = {
       "Day 1": [
         { section: "WARM UP", name: "Ankle Mobility (knee-to-wall)", sets: 2, reps: "1 min/side", rpe: "—", cue: "Knee tracks over toe. Essential for landing mechanics." },
@@ -124,6 +122,12 @@
       "NECK": "#6b7280", "ARMS": "#7c3aed", "FINISHER": "#059669",
       "CARRY": "#0891b2",
     };
+
+    const TRACKER_META = Object.fromEntries(
+      Object.entries(PROGRAM).flatMap(([day, exercises]) =>
+        exercises.map(ex => [`${day}||${ex.name}`, { section: ex.section, sets: ex.sets, reps: ex.reps }])
+      )
+    );
 
     const STORAGE_KEY = "phase1-tracker-v1";
     const TYPES_KEY = "phase1-types-v1";
@@ -200,7 +204,7 @@
       );
     }
 
-    function PhaseLanding({ onSelect }) {
+    function PhaseLanding({ onSelect, cloudUser, authEmail, setAuthEmail, authStatus, onLogin }) {
       return (
         <div style={{ minHeight: "100vh", padding: "28px 16px 64px", color: UI.primary, fontFamily: UI.sans }}>
           <div style={{ maxWidth: 720, margin: "0 auto" }}>
@@ -213,70 +217,87 @@
             <div style={{ display: "grid", gap: 10, marginTop: 48 }}>
               {PHASES.map((phase, index) => {
                 const isActive = phase.id === "phase1";
+                const canOpen = isActive && !!cloudUser;
                 return (
                   <button
                     key={phase.id}
-                    onClick={() => isActive && onSelect(phase.id)}
-                    disabled={!isActive}
+                    onClick={() => canOpen && onSelect(phase.id)}
+                    disabled={!canOpen}
                     style={{
-                      background: isActive ? UI.surface : "rgba(17,17,17,0.58)",
-                      border: `1px solid ${isActive ? UI.borderVisible : UI.border}`,
-                      borderLeft: `2px solid ${isActive ? UI.accent : UI.border}`,
+                      background: canOpen ? UI.surface : "rgba(17,17,17,0.58)",
+                      border: `1px solid ${canOpen ? UI.borderVisible : UI.border}`,
+                      borderLeft: `2px solid ${canOpen ? UI.accent : UI.border}`,
                       borderRadius: 6,
                       padding: "18px 16px",
-                      color: isActive ? UI.primary : UI.disabled,
-                      cursor: isActive ? "pointer" : "not-allowed",
+                      color: canOpen ? UI.primary : UI.disabled,
+                      cursor: canOpen ? "pointer" : "not-allowed",
                       textAlign: "left",
                       transition: UI.ease,
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
                       <div>
-                        <div style={{ fontFamily: UI.mono, fontSize: 10, letterSpacing: "0.1em", color: isActive ? UI.secondary : UI.disabled }}>0{index + 1} / {phase.status}</div>
-                        <div style={{ fontSize: 24, lineHeight: 1.05, letterSpacing: "-0.03em", color: isActive ? UI.display : UI.secondary, marginTop: 8 }}>{phase.label}</div>
-                        <div style={{ fontSize: 13, lineHeight: 1.45, color: isActive ? UI.secondary : UI.disabled, marginTop: 10 }}>{phase.description}</div>
+                        <div style={{ fontFamily: UI.mono, fontSize: 10, letterSpacing: "0.1em", color: canOpen ? UI.secondary : UI.disabled }}>0{index + 1} / {phase.status}</div>
+                        <div style={{ fontSize: 24, lineHeight: 1.05, letterSpacing: "-0.03em", color: canOpen ? UI.display : UI.secondary, marginTop: 8 }}>{phase.label}</div>
+                        <div style={{ fontSize: 13, lineHeight: 1.45, color: canOpen ? UI.secondary : UI.disabled, marginTop: 10 }}>{phase.description}</div>
                       </div>
-                      <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: isActive ? UI.accent : UI.disabled }}>
-                        {isActive ? "OPEN" : "LOCKED"}
+                      <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: canOpen ? UI.accent : UI.disabled }}>
+                        {canOpen ? "OPEN" : (isActive ? "LOGIN" : "LOCKED")}
                       </div>
                     </div>
                   </button>
                 );
               })}
             </div>
+
+            {!cloudUser && (
+              <div style={{ marginTop: 28, padding: 16, background: UI.surface, border: `1px solid ${UI.borderVisible}`, borderRadius: 6 }}>
+                <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary }}>LOGIN REQUIRED FOR CLOUD</div>
+                <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.5, color: UI.secondary }}>Use a magic link to connect this browser to Supabase.</div>
+                <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                  <input
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="EMAIL"
+                    style={{
+                      flex: "1 1 220px",
+                      background: UI.black,
+                      border: `1px solid ${UI.borderVisible}`,
+                      borderRadius: 4,
+                      padding: "9px 10px",
+                      color: UI.primary,
+                      fontSize: 11,
+                      fontFamily: UI.mono,
+                      letterSpacing: "0.04em",
+                      outline: "none",
+                    }}
+                  />
+                  <button
+                    onClick={onLogin}
+                    disabled={authStatus === "sending"}
+                    style={{
+                      background: UI.display,
+                      border: `1px solid ${UI.display}`,
+                      borderRadius: 4,
+                      padding: "9px 11px",
+                      color: UI.black,
+                      fontFamily: UI.mono,
+                      fontWeight: 700,
+                      fontSize: 11,
+                      letterSpacing: "0.08em",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {authStatus === "sending" ? "SENDING" : "SEND LINK"}
+                  </button>
+                </div>
+                {authStatus === "sent" && <div style={{ marginTop: 10, fontFamily: UI.mono, fontSize: 11, color: UI.success }}>LINK SENT</div>}
+                {authStatus === "error" && <div style={{ marginTop: 10, fontFamily: UI.mono, fontSize: 11, color: UI.accent }}>LOGIN FAILED</div>}
+              </div>
+            )}
           </div>
         </div>
       );
-    }
-
-    function loadSheetRows() {
-      return new Promise((resolve, reject) => {
-        const callbackName = `sheetImport_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const script = document.createElement("script");
-        const separator = SHEETS_URL.includes("?") ? "&" : "?";
-        const timeout = setTimeout(() => {
-          cleanup();
-          reject(new Error("Sheet import timed out"));
-        }, 15000);
-
-        function cleanup() {
-          clearTimeout(timeout);
-          delete window[callbackName];
-          script.remove();
-        }
-
-        window[callbackName] = (payload) => {
-          cleanup();
-          resolve(payload);
-        };
-
-        script.onerror = () => {
-          cleanup();
-          reject(new Error("Sheet import failed"));
-        };
-        script.src = `${SHEETS_URL}${separator}callback=${callbackName}`;
-        document.body.appendChild(script);
-      });
     }
 
     function App() {
@@ -288,6 +309,11 @@
       const [saveStatus, setSaveStatus] = useState("");
       const [syncStatus, setSyncStatus] = useState("idle");
       const [importStatus, setImportStatus] = useState("idle");
+      const [cloudUser, setCloudUser] = useState(null);
+      const [authEmail, setAuthEmail] = useState(() => {
+        try { return window.SUPABASE_LOGIN_EMAIL || ""; } catch (_) { return ""; }
+      });
+      const [authStatus, setAuthStatus] = useState("idle");
       const [selectedPhase, setSelectedPhase] = useState(() => {
         try { return localStorage.getItem(LAST_PHASE_KEY) || null; } catch (_) { return null; }
       });
@@ -305,6 +331,65 @@
           if (savedTypes) setTypes(JSON.parse(savedTypes));
         } catch (_) {}
       }, []);
+
+      useEffect(() => {
+        let alive = true;
+
+        const syncFromCloud = async () => {
+          if (!window.supabase?.getSession) return;
+          const { session } = await window.supabase.getSession();
+          const user = session?.user || null;
+          if (!alive || !user) return;
+          setCloudUser(user);
+
+          const remote = await window.supabase.hydrateTrackerStateFromSupabase(user.id);
+          if (!alive) return;
+
+          const remoteHasData = Object.keys(remote?.weights || {}).length > 0;
+          if (remoteHasData) {
+            setWeights(remote.weights);
+            setTypes(remote.types);
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(remote.weights));
+              localStorage.setItem(TYPES_KEY, JSON.stringify(remote.types));
+            } catch (_) {}
+            return;
+          }
+
+          const migrated = await window.supabase.migrateLocalToSupabaseIfNeeded(user.id);
+          if (!alive || migrated?.error) return;
+          if ((migrated?.migrated || 0) > 0) {
+            const refreshed = await window.supabase.hydrateTrackerStateFromSupabase(user.id);
+            if (!alive) return;
+            setWeights(refreshed.weights || {});
+            setTypes(refreshed.types || {});
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed.weights || {}));
+              localStorage.setItem(TYPES_KEY, JSON.stringify(refreshed.types || {}));
+            } catch (_) {}
+          }
+        };
+
+        syncFromCloud();
+        return () => { alive = false; };
+      }, []);
+
+      const sendLoginLink = async () => {
+        if (!authEmail.trim() || !window.supabase?.sendMagicLink) {
+          setAuthStatus("error");
+          setTimeout(() => setAuthStatus("idle"), 2000);
+          return;
+        }
+        setAuthStatus("sending");
+        const res = await window.supabase.sendMagicLink(authEmail.trim());
+        if (res?.error) {
+          setAuthStatus("error");
+          setTimeout(() => setAuthStatus("idle"), 3000);
+          return;
+        }
+        setAuthStatus("sent");
+        setTimeout(() => setAuthStatus("idle"), 4000);
+      };
 
       const save = useCallback((newWeights) => {
         try {
@@ -359,90 +444,52 @@
       const getType = (day, exercise) =>
         types[`${day}||${exercise}`] || null;
 
-      const syncToSheets = async () => {
-        setSyncStatus("syncing");
-        const today = new Date().toISOString().split("T")[0];
-        const rows = [];
-        for (const day of DAYS) {
-          const exercises = PROGRAM[day] || [];
-          for (const ex of exercises) {
-            for (const week of WEEKS) {
-              const key = `${day}||${ex.name}`;
-              const w = weights[key]?.[week]?.weight;
-              const note = weights[key]?.[week]?.comment || "";
-              const t = types[key] || "";
-              if (w) {
-                rows.push({
-                  date: today, week, day,
-                  section: ex.section, exercise: ex.name,
-                  sets: ex.sets, reps: ex.reps,
-                  weight: w, type: t, notes: note,
-                });
-              }
-            }
-          }
+      const syncToCloud = async () => {
+        if (!cloudUser?.id || !window.supabase?.upsertTrackerStateToSupabase) {
+          setSyncStatus("error");
+          setTimeout(() => setSyncStatus("idle"), 2000);
+          return;
         }
-        if (rows.length === 0) {
+        setSyncStatus("syncing");
+        const payload = { userId: cloudUser.id, weights, types, metaByKey: TRACKER_META };
+        const result = await window.supabase.upsertTrackerStateToSupabase(payload);
+        if (result?.error) {
+          setSyncStatus("error");
+          setTimeout(() => setSyncStatus("idle"), 3000);
+          return;
+        }
+        if (!Object.keys(weights).length) {
           setSyncStatus("empty");
           setTimeout(() => setSyncStatus("idle"), 2500);
           return;
         }
-        try {
-          await fetch(SHEETS_URL, {
-            method: "POST", mode: "no-cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rows }),
-          });
-          setSyncStatus("ok");
-          setTimeout(() => setSyncStatus("idle"), 3000);
-        } catch (_) {
-          setSyncStatus("error");
-          setTimeout(() => setSyncStatus("idle"), 3000);
-        }
+        setSyncStatus("ok");
+        setTimeout(() => setSyncStatus("idle"), 3000);
       };
 
-      const importFromSheets = async () => {
-        setImportStatus("importing");
-        try {
-          const data = await loadSheetRows();
-          const rows = Array.isArray(data?.rows) ? data.rows : [];
-          if (rows.length === 0) {
-            setImportStatus("empty");
-            setTimeout(() => setImportStatus("idle"), 2500);
-            return;
-          }
-
-          const nextWeights = {};
-          const nextTypes = {};
-          rows.forEach(row => {
-            const day = row.day || row.Day;
-            const exercise = row.exercise || row.Exercise;
-            const week = row.week || row.Week;
-            if (!day || !exercise || !week) return;
-
-            const key = `${day}||${exercise}`;
-            const weight = row.weight ?? row.Weight ?? "";
-            const comment = row.notes ?? row.Notes ?? "";
-            const type = row.type ?? row.Type ?? "";
-
-            nextWeights[key] = {
-              ...(nextWeights[key] || {}),
-              [week]: { weight: type === "bw" ? "" : String(weight || ""), comment: String(comment || "") }
-            };
-            if (type) nextTypes[key] = type;
-          });
-
-          setWeights(nextWeights);
-          setTypes(nextTypes);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextWeights));
-          localStorage.setItem(TYPES_KEY, JSON.stringify(nextTypes));
-          localStorage.setItem(LAST_PHASE_KEY, "phase1");
-          setImportStatus("ok");
-          setTimeout(() => setImportStatus("idle"), 3000);
-        } catch (_) {
+      const importFromCloud = async () => {
+        if (!cloudUser?.id || !window.supabase?.hydrateTrackerStateFromSupabase) {
           setImportStatus("error");
-          setTimeout(() => setImportStatus("idle"), 3000);
+          setTimeout(() => setImportStatus("idle"), 2000);
+          return;
         }
+        setImportStatus("importing");
+        const remote = await window.supabase.hydrateTrackerStateFromSupabase(cloudUser.id);
+        const rowsLoaded = Object.keys(remote?.weights || {}).length;
+        if (!rowsLoaded) {
+          setImportStatus("empty");
+          setTimeout(() => setImportStatus("idle"), 2500);
+          return;
+        }
+        setWeights(remote.weights || {});
+        setTypes(remote.types || {});
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(remote.weights || {}));
+          localStorage.setItem(TYPES_KEY, JSON.stringify(remote.types || {}));
+          localStorage.setItem(LAST_PHASE_KEY, "phase1");
+        } catch (_) {}
+        setImportStatus("ok");
+        setTimeout(() => setImportStatus("idle"), 3000);
       };
 
       const exercises = PROGRAM[activeDay] || [];
@@ -453,23 +500,23 @@
       const activeWeekLabel = activeWeek === "W5 (Deload)" ? "W5" : activeWeek;
 
       const syncStyles = {
-        idle:    { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: "SYNC SHEETS" },
+        idle:    { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: cloudUser ? "SYNC CLOUD" : "CLOUD LOCKED" },
         syncing: { bg: UI.black, border: UI.borderVisible, color: UI.disabled, label: "SYNCING" },
-        ok:      { bg: UI.black, border: UI.success, color: UI.success, label: "SAVED REMOTE" },
+        ok:      { bg: UI.black, border: UI.success, color: UI.success, label: "SAVED CLOUD" },
         empty:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "NO DATA" },
         error:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "SYNC ERROR" },
       }[syncStatus];
 
       const importStyles = {
-        idle:      { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: "IMPORT SHEET" },
+        idle:      { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: cloudUser ? "LOAD CLOUD" : "CLOUD LOCKED" },
         importing: { bg: UI.black, border: UI.borderVisible, color: UI.disabled, label: "IMPORTING" },
-        ok:        { bg: UI.black, border: UI.success, color: UI.success, label: "IMPORTED" },
+        ok:        { bg: UI.black, border: UI.success, color: UI.success, label: "LOADED" },
         empty:     { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "NO ROWS" },
         error:     { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "IMPORT ERROR" },
       }[importStatus];
 
-      if (selectedPhase !== "phase1") {
-        return <PhaseLanding onSelect={openPhase} />;
+      if (selectedPhase !== "phase1" || !cloudUser) {
+        return <PhaseLanding onSelect={openPhase} cloudUser={cloudUser} authEmail={authEmail} setAuthEmail={setAuthEmail} authStatus={authStatus} onLogin={sendLoginLink} />;
       }
 
       return (
@@ -488,9 +535,12 @@
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: "column" }}>
                 {saveStatus === "saved" && <div style={{ fontSize: 11, color: UI.success, fontFamily: UI.mono, letterSpacing: "0.08em" }}>[SAVED]</div>}
-                <button onClick={importFromSheets} disabled={importStatus === "importing"} style={{
+                <div style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, letterSpacing: "0.08em" }}>
+                  {cloudUser ? `CLOUD / ${cloudUser.email || cloudUser.id}` : "CLOUD / OFFLINE"}
+                </div>
+                <button onClick={importFromCloud} disabled={importStatus === "importing" || !cloudUser} style={{
                   background: importStyles.bg, border: `1px solid ${importStyles.border}`,
-                  borderRadius: 4, cursor: importStatus === "importing" ? "default" : "pointer",
+                  borderRadius: 4, cursor: importStatus === "importing" || !cloudUser ? "default" : "pointer",
                   padding: "8px 11px", color: importStyles.color,
                   fontFamily: UI.mono,
                   fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
@@ -498,9 +548,9 @@
                 }}>
                   {importStyles.label}
                 </button>
-                <button onClick={syncToSheets} disabled={syncStatus === "syncing"} style={{
+                <button onClick={syncToCloud} disabled={syncStatus === "syncing" || !cloudUser} style={{
                   background: syncStyles.bg, border: `1px solid ${syncStyles.border}`,
-                  borderRadius: 4, cursor: syncStatus === "syncing" ? "default" : "pointer",
+                  borderRadius: 4, cursor: syncStatus === "syncing" || !cloudUser ? "default" : "pointer",
                   padding: "8px 11px", color: syncStyles.color,
                   fontFamily: UI.mono,
                   fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
