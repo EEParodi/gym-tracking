@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Phase 1 Tracker</title>
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    // Expose Supabase credentials for the ES module wrapper (Phase 2 migration path)
+    window.SUPABASE_URL = "https://gehcmkgtdisltlmljmhm.supabase.co";
+    window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdlaGNta2d0ZGlzbHRsbWxqbWhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NzQxMzgsImV4cCI6MjA5MjU1MDEzOH0.RK61twAyiUYjE5Wzgx2M9GwQ_gT2B10IkXRIB7qPG9g";
+  </script>
+  <script type="module" src="./frontend/supabaseClient.mjs"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --black: #000000;
+      --surface: #111111;
+      --surface-raised: #1A1A1A;
+      --border: #222222;
+      --border-visible: #333333;
+      --text-disabled: #666666;
+      --text-secondary: #999999;
+      --text-primary: #E8E8E8;
+      --text-display: #FFFFFF;
+      --accent: #D71921;
+      --success: #4A9E5C;
+      --warning: #D4A843;
+    }
+    body {
+      background: #000;
+      color: var(--text-primary);
+      font-family: 'Space Grotesk', sans-serif;
+      background-image: radial-gradient(circle, rgba(51,51,51,0.18) 0.5px, transparent 0.5px);
+      background-size: 16px 16px;
+    }
+    input { font-family: inherit; }
+    input:disabled { opacity: 0.4; cursor: not-allowed; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #000; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+    input::placeholder { color: #666; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    const DAYS = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5 (Optional)"];
+    const WEEKS = ["W1", "W2", "W3", "W4", "W5 (Deload)"];
+    const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxrs9So7EjKeLQxtDS1dzbVRlT_dbHHj09kH0VvlQkU9_9xI72d_nBGuWVNc2ipBXoO/exec";
+
+    const PROGRAM = {
+      "Day 1": [
+        { section: "WARM UP", name: "Ankle Mobility (knee-to-wall)", sets: 2, reps: "1 min/side", rpe: "—", cue: "Knee tracks over toe. Essential for landing mechanics." },
+        { section: "WARM UP", name: "Tibialis Raises", sets: 3, reps: "15", rpe: "Burn", cue: "Burn the shins. Preps for deceleration." },
+        { section: "WARM UP", name: "Iso Split Squat Hold", sets: 2, reps: "30s/leg", rpe: "Tension", cue: "Hold bottom of lunge. Hover knee 1 inch off floor." },
+        { section: "WARM UP", name: "Single Leg Glute Bridge", sets: 2, reps: "12/side", rpe: "Activation", cue: "Squeeze glute hard at top. Wake it up." },
+        { section: "PLYO", name: "Altitude Drop", sets: 3, reps: "6", rpe: "Tech", cue: "Step off → land → freeze. Silent landing, forefoot." },
+        { section: "SQUAT", name: "Back Squat", sets: 4, reps: "6–8", rpe: "8", cue: "Tempo 2-0-1. Control down, fast up. Add 2.5kg when RPE drops to 7." },
+        { section: "CALF", name: "Leg Press Calf Raise", sets: 4, reps: "10", rpe: "8–9", cue: "Explosive up, 3s down. Full stretch at bottom." },
+        { section: "CALF", name: "Seated Calf Raise", sets: 3, reps: "12", rpe: "8–9", cue: "Soleus focus. Pause at stretch." },
+        { section: "UNI", name: "Barbell Lunges", sets: 3, reps: "10/leg", rpe: "8", cue: "Catch yourself on the front foot. Controlled." },
+        { section: "CORE", name: "Ab Wheel Rollout", sets: 3, reps: "10", rpe: "Quality", cue: "Glutes squeezed throughout. No back sag." },
+      ],
+      "Day 2": [
+        { section: "WARM UP", name: "Band Pull-Aparts", sets: 2, reps: "20", rpe: "Activation", cue: "Palms up. Squeeze shoulder blades." },
+        { section: "WARM UP", name: "Scapular Pull-ups", sets: 2, reps: "10", rpe: "Control", cue: "Hang from bar, shrug shoulders down/up." },
+        { section: "WARM UP", name: "KB Halo", sets: 2, reps: "10", rpe: "—", cue: "Orbit the head. Loosen shoulders. ~20kg." },
+        { section: "WARM UP", name: "Face Pulls (light)", sets: 2, reps: "15", rpe: "Burn", cue: "Pull to forehead. Rotate hands back." },
+        { section: "PRESS", name: "Push Press", sets: 4, reps: "5–6", rpe: "8", cue: "Dip, drive, lockout. Leg power launches the bar." },
+        { section: "ROW", name: "Pendlay Row", sets: 4, reps: "8", rpe: "8–9", cue: "Explosive pull from floor. Full reset each rep." },
+        { section: "CHEST", name: "Incline DB Bench", sets: 3, reps: "10", rpe: "8", cue: "Control eccentric. Zero shaking on final set." },
+        { section: "NECK", name: "Weighted Neck Flexion", sets: 3, reps: "12", rpe: "—", cue: "" },
+        { section: "ARMS", name: "EZ Bar Curl", sets: 3, reps: "10–12", rpe: "8–9", cue: "" },
+        { section: "ARMS", name: "Skullcrushers", sets: 3, reps: "10–12", rpe: "8–9", cue: "" },
+        { section: "FINISHER", name: "Lu Raises", sets: 2, reps: "15", rpe: "Quality", cue: "" },
+      ],
+      "Day 3": [
+        { section: "WARM UP", name: "Hip 90/90", sets: 2, reps: "1 min", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Single Leg Glute Bridge", sets: 2, reps: "12/side", rpe: "Activation", cue: "" },
+        { section: "WARM UP", name: "Lateral Lunges", sets: 2, reps: "8/side", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Copenhagen Plank Hold", sets: 2, reps: "20-30s/side", rpe: "—", cue: "" },
+        { section: "PLYO", name: "1-Leg Hop & Stick", sets: 3, reps: "5/leg", rpe: "Tech", cue: "" },
+        { section: "HAMS", name: "Trap Bar Deadlift", sets: 4, reps: "5–6", rpe: "8.5", cue: "" },
+        { section: "HINGE", name: "Good Mornings", sets: 3, reps: "10", rpe: "8", cue: "" },
+        { section: "UNI", name: "Single Leg Press", sets: 3, reps: "10", rpe: "8", cue: "" },
+        { section: "CARRY", name: "Pallof Press", sets: 3, reps: "12/side", rpe: "Quality", cue: "" },
+        { section: "WARM UP", name: "Tibialis Raises (end)", sets: 3, reps: "20", rpe: "Burn", cue: "Pump the shins to finish." },
+      ],
+      "Day 4": [
+        { section: "WARM UP", name: "Face Pulls", sets: 2, reps: "15", rpe: "Burn", cue: "" },
+        { section: "WARM UP", name: "Scap Push-Ups", sets: 2, reps: "12", rpe: "Control", cue: "" },
+        { section: "WARM UP", name: "Dead Hang", sets: 2, reps: "45s", rpe: "—", cue: "Full shoulder decompression. Grip work." },
+        { section: "WARM UP", name: "Thread the Needle", sets: 2, reps: "5/side", rpe: "—", cue: "Thoracic rotation. Slow and controlled." },
+        { section: "PRESS", name: "Close Grip Bench", sets: 4, reps: "6–8", rpe: "8.5", cue: "Hands shoulder-width. Elbows tucked. 1s pause." },
+        { section: "PULL", name: "Lat Pulldown", sets: 3, reps: "12–15", rpe: "8–9", cue: "Full stretch at top. Squeeze hard at bottom." },
+        { section: "ROW", name: "Bear Stance Row", sets: 3, reps: "10", rpe: "8.5", cue: "Isolate upper back. Squeeze hard at top." },
+        { section: "NECK", name: "Weighted Neck Extension", sets: 3, reps: "12", rpe: "—", cue: "Plate on back of head. Look up. Slow eccentric." },
+        { section: "ARMS", name: "Tricep Pushdown", sets: 3, reps: "14–16", rpe: "8–9", cue: "Rope attachment. Spread at bottom. Full extension." },
+        { section: "ARMS", name: "Hammer Curls", sets: 3, reps: "10–12", rpe: "8–9", cue: "DBs. Brachialis focus. No swing." },
+      ],
+      "Day 5 (Optional)": [
+        { section: "WARM UP", name: "Walking High Knees", sets: 2, reps: "10m", rpe: "Flow", cue: "Bring knee to chest. Dynamic stretch." },
+        { section: "WARM UP", name: "Butt Kicks", sets: 2, reps: "10m", rpe: "Flow", cue: "Dynamic quad stretch." },
+        { section: "WARM UP", name: "Side Shuffles", sets: 2, reps: "10m", rpe: "Flow", cue: "Stay low. Wake up hips." },
+        { section: "WARM UP", name: "Static Calf Stretch", sets: 2, reps: "45s/side", rpe: "—", cue: "Lean into wall. Both straight and bent knee." },
+        { section: "CARRY", name: "Jog / Walk Intervals", sets: 6, reps: "3 min", rpe: "5", cue: "1 min jog / 2 min walk. Grass/turf. Cleats." },
+        { section: "CARRY", name: "Backward Sled Drag", sets: 3, reps: "20m", rpe: "9 (legs)", cue: "Lean back. Burn the quads. Zero Achilles impact." },
+        { section: "CARRY", name: "Lateral Sled Drag", sets: 2, reps: "15m/side", rpe: "6", cue: "Adductor health. Cross feet over." },
+        { section: "WARM UP", name: "Tibialis Raises (finisher)", sets: 3, reps: "20", rpe: "Burn", cue: "Pump the shins to finish." },
+      ],
+    };
+
+    const SECTION_COLORS = {
+      "WARM UP": "#4b5563", "PLYO": "#7c3aed", "SQUAT": "#d97706",
+      "HAMS": "#d97706", "HINGE": "#d97706", "UNI": "#d97706",
+      "CALF": "#b45309", "CORE": "#059669", "PRESS": "#dc2626",
+      "ROW": "#2563eb", "CHEST": "#db2777", "PULL": "#2563eb",
+      "NECK": "#6b7280", "ARMS": "#7c3aed", "FINISHER": "#059669",
+      "CARRY": "#0891b2",
+    };
+
+    const STORAGE_KEY = "phase1-tracker-v1";
+    const TYPES_KEY = "phase1-types-v1";
+    const LAST_PHASE_KEY = "phase-tracker-last-phase";
+
+    const PHASES = [
+      { id: "phase1", label: "PHASE 1", status: "ACTIVE", description: "Current training tracker. Weeks, days, weights, cues, notes." },
+      { id: "phase2", label: "PHASE 2", status: "PLANNED", description: "Future Supabase-backed multi-device tracker." },
+      { id: "phase3", label: "PHASE 3", status: "PLANNED", description: "Future analysis, progression, and review layer." },
+    ];
+
+    const UI = {
+      black: "#000000",
+      surface: "#111111",
+      raised: "#1A1A1A",
+      border: "#222222",
+      borderVisible: "#333333",
+      disabled: "#666666",
+      secondary: "#999999",
+      primary: "#E8E8E8",
+      display: "#FFFFFF",
+      accent: "#D71921",
+      success: "#4A9E5C",
+      warning: "#D4A843",
+      mono: "'Space Mono', monospace",
+      sans: "'Space Grotesk', sans-serif",
+      displayFont: "'Doto', 'Space Mono', monospace",
+      ease: "all 0.18s cubic-bezier(0.25, 0.1, 0.25, 1)",
+    };
+
+    // Returns the weight logged in the most recent previous week
+    function getPrevWeight(weights, day, exercise, currentWeek) {
+      const weekIdx = WEEKS.indexOf(currentWeek);
+      if (weekIdx <= 0) return null;
+      for (let i = weekIdx - 1; i >= 0; i--) {
+        const w = weights[`${day}||${exercise}`]?.[WEEKS[i]]?.weight;
+        if (w) return { weight: w, week: WEEKS[i] };
+      }
+      return null;
+    }
+
+    const TYPE_OPTIONS = [
+      { id: "bb",  label: "BB",  title: "Barbell" },
+      { id: "db",  label: "DB",  title: "Dumbbell" },
+      { id: "bw",  label: "BW",  title: "Bodyweight" },
+    ];
+
+    function TypeToggle({ value, onChange }) {
+      return (
+        <div style={{ display: "flex", gap: 3 }}>
+          {TYPE_OPTIONS.map(opt => {
+            const active = value === opt.id;
+            const isBW = opt.id === "bw";
+            return (
+              <button
+                key={opt.id}
+                title={opt.title}
+                onClick={() => onChange(active ? null : opt.id)}
+                style={{
+                  background: active ? UI.display : UI.black,
+                  border: `1px solid ${active ? UI.display : UI.borderVisible}`,
+                  borderRadius: 4, cursor: "pointer", padding: "4px 7px",
+                  color: active ? UI.black : UI.disabled,
+                  fontFamily: UI.mono,
+                  fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+                  transition: UI.ease,
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    function PhaseLanding({ onSelect }) {
+      return (
+        <div style={{ minHeight: "100vh", padding: "28px 16px 64px", color: UI.primary, fontFamily: UI.sans }}>
+          <div style={{ maxWidth: 720, margin: "0 auto" }}>
+            <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary }}>TRAINING SYSTEM</div>
+            <div style={{ fontFamily: UI.displayFont, fontSize: 68, lineHeight: 0.9, letterSpacing: "-0.06em", color: UI.display, marginTop: 12 }}>PHASES</div>
+            <div style={{ fontSize: 16, lineHeight: 1.5, color: UI.secondary, marginTop: 18, maxWidth: 480 }}>
+              Select a training phase. Returning sessions open the most recently used phase automatically.
+            </div>
+
+            <div style={{ display: "grid", gap: 10, marginTop: 48 }}>
+              {PHASES.map((phase, index) => {
+                const isActive = phase.id === "phase1";
+                return (
+                  <button
+                    key={phase.id}
+                    onClick={() => isActive && onSelect(phase.id)}
+                    disabled={!isActive}
+                    style={{
+                      background: isActive ? UI.surface : "rgba(17,17,17,0.58)",
+                      border: `1px solid ${isActive ? UI.borderVisible : UI.border}`,
+                      borderLeft: `2px solid ${isActive ? UI.accent : UI.border}`,
+                      borderRadius: 6,
+                      padding: "18px 16px",
+                      color: isActive ? UI.primary : UI.disabled,
+                      cursor: isActive ? "pointer" : "not-allowed",
+                      textAlign: "left",
+                      transition: UI.ease,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+                      <div>
+                        <div style={{ fontFamily: UI.mono, fontSize: 10, letterSpacing: "0.1em", color: isActive ? UI.secondary : UI.disabled }}>0{index + 1} / {phase.status}</div>
+                        <div style={{ fontSize: 24, lineHeight: 1.05, letterSpacing: "-0.03em", color: isActive ? UI.display : UI.secondary, marginTop: 8 }}>{phase.label}</div>
+                        <div style={{ fontSize: 13, lineHeight: 1.45, color: isActive ? UI.secondary : UI.disabled, marginTop: 10 }}>{phase.description}</div>
+                      </div>
+                      <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: isActive ? UI.accent : UI.disabled }}>
+                        {isActive ? "OPEN" : "LOCKED"}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function loadSheetRows() {
+      return new Promise((resolve, reject) => {
+        const callbackName = `sheetImport_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const script = document.createElement("script");
+        const separator = SHEETS_URL.includes("?") ? "&" : "?";
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error("Sheet import timed out"));
+        }, 15000);
+
+        function cleanup() {
+          clearTimeout(timeout);
+          delete window[callbackName];
+          script.remove();
+        }
+
+        window[callbackName] = (payload) => {
+          cleanup();
+          resolve(payload);
+        };
+
+        script.onerror = () => {
+          cleanup();
+          reject(new Error("Sheet import failed"));
+        };
+        script.src = `${SHEETS_URL}${separator}callback=${callbackName}`;
+        document.body.appendChild(script);
+      });
+    }
+
+    function App() {
+      const [activeDay, setActiveDay] = useState("Day 1");
+      const [activeWeek, setActiveWeek] = useState("W1");
+      const [weights, setWeights] = useState({});
+      const [types, setTypes] = useState({});   // { "Day 1||Back Squat": "bb" | "db" | "bw" | null }
+      const [expandedCue, setExpandedCue] = useState(null);
+      const [saveStatus, setSaveStatus] = useState("");
+      const [syncStatus, setSyncStatus] = useState("idle");
+      const [importStatus, setImportStatus] = useState("idle");
+      const [selectedPhase, setSelectedPhase] = useState(() => {
+        try { return localStorage.getItem(LAST_PHASE_KEY) || null; } catch (_) { return null; }
+      });
+
+      const openPhase = (phaseId) => {
+        setSelectedPhase(phaseId);
+        try { localStorage.setItem(LAST_PHASE_KEY, phaseId); } catch (_) {}
+      };
+
+      useEffect(() => {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) setWeights(JSON.parse(saved));
+          const savedTypes = localStorage.getItem(TYPES_KEY);
+          if (savedTypes) setTypes(JSON.parse(savedTypes));
+        } catch (_) {}
+      }, []);
+
+      const save = useCallback((newWeights) => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(newWeights));
+          localStorage.setItem(LAST_PHASE_KEY, "phase1");
+          setSaveStatus("saved");
+          setTimeout(() => setSaveStatus(""), 1200);
+        } catch (_) {}
+      }, []);
+
+      const saveTypes = useCallback((newTypes) => {
+        try {
+          localStorage.setItem(TYPES_KEY, JSON.stringify(newTypes));
+          localStorage.setItem(LAST_PHASE_KEY, "phase1");
+        } catch (_) {}
+      }, []);
+
+      const handleWeight = (day, exercise, value) => {
+        const key = `${day}||${exercise}`;
+        const updated = {
+          ...weights,
+          [key]: { ...(weights[key] || {}), [activeWeek]: { ...(weights[key]?.[activeWeek] || {}), weight: value } }
+        };
+        setWeights(updated);
+        save(updated);
+      };
+
+      const handleComment = (day, exercise, value) => {
+        const key = `${day}||${exercise}`;
+        const updated = {
+          ...weights,
+          [key]: { ...(weights[key] || {}), [activeWeek]: { ...(weights[key]?.[activeWeek] || {}), comment: value } }
+        };
+        setWeights(updated);
+        save(updated);
+      };
+
+      const handleType = (day, exercise, typeVal) => {
+        const key = `${day}||${exercise}`;
+        const updated = { ...types, [key]: typeVal };
+        setTypes(updated);
+        saveTypes(updated);
+        // If switching to BW, clear the weight input for current week
+        if (typeVal === "bw") {
+          handleWeight(day, exercise, "");
+        }
+      };
+
+      const getVal = (day, exercise, field) =>
+        weights[`${day}||${exercise}`]?.[activeWeek]?.[field] || "";
+
+      const getType = (day, exercise) =>
+        types[`${day}||${exercise}`] || null;
+
+      const syncToSheets = async () => {
+        setSyncStatus("syncing");
+        const today = new Date().toISOString().split("T")[0];
+        const rows = [];
+        for (const day of DAYS) {
+          const exercises = PROGRAM[day] || [];
+          for (const ex of exercises) {
+            for (const week of WEEKS) {
+              const key = `${day}||${ex.name}`;
+              const w = weights[key]?.[week]?.weight;
+              const note = weights[key]?.[week]?.comment || "";
+              const t = types[key] || "";
+              if (w) {
+                rows.push({
+                  date: today, week, day,
+                  section: ex.section, exercise: ex.name,
+                  sets: ex.sets, reps: ex.reps,
+                  weight: w, type: t, notes: note,
+                });
+              }
+            }
+          }
+        }
+        if (rows.length === 0) {
+          setSyncStatus("empty");
+          setTimeout(() => setSyncStatus("idle"), 2500);
+          return;
+        }
+        try {
+          await fetch(SHEETS_URL, {
+            method: "POST", mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rows }),
+          });
+          setSyncStatus("ok");
+          setTimeout(() => setSyncStatus("idle"), 3000);
+        } catch (_) {
+          setSyncStatus("error");
+          setTimeout(() => setSyncStatus("idle"), 3000);
+        }
+      };
+
+      const importFromSheets = async () => {
+        setImportStatus("importing");
+        try {
+          const data = await loadSheetRows();
+          const rows = Array.isArray(data?.rows) ? data.rows : [];
+          if (rows.length === 0) {
+            setImportStatus("empty");
+            setTimeout(() => setImportStatus("idle"), 2500);
+            return;
+          }
+
+          const nextWeights = {};
+          const nextTypes = {};
+          rows.forEach(row => {
+            const day = row.day || row.Day;
+            const exercise = row.exercise || row.Exercise;
+            const week = row.week || row.Week;
+            if (!day || !exercise || !week) return;
+
+            const key = `${day}||${exercise}`;
+            const weight = row.weight ?? row.Weight ?? "";
+            const comment = row.notes ?? row.Notes ?? "";
+            const type = row.type ?? row.Type ?? "";
+
+            nextWeights[key] = {
+              ...(nextWeights[key] || {}),
+              [week]: { weight: type === "bw" ? "" : String(weight || ""), comment: String(comment || "") }
+            };
+            if (type) nextTypes[key] = type;
+          });
+
+          setWeights(nextWeights);
+          setTypes(nextTypes);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(nextWeights));
+          localStorage.setItem(TYPES_KEY, JSON.stringify(nextTypes));
+          localStorage.setItem(LAST_PHASE_KEY, "phase1");
+          setImportStatus("ok");
+          setTimeout(() => setImportStatus("idle"), 3000);
+        } catch (_) {
+          setImportStatus("error");
+          setTimeout(() => setImportStatus("idle"), 3000);
+        }
+      };
+
+      const exercises = PROGRAM[activeDay] || [];
+      const sections = [...new Set(exercises.map(e => e.section))];
+      const workingExercises = exercises.filter(e => e.section !== "WARM UP");
+      const loggedCount = workingExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").length;
+      const progressLabel = `${loggedCount}/${workingExercises.length}`;
+      const activeWeekLabel = activeWeek === "W5 (Deload)" ? "W5" : activeWeek;
+
+      const syncStyles = {
+        idle:    { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: "SYNC SHEETS" },
+        syncing: { bg: UI.black, border: UI.borderVisible, color: UI.disabled, label: "SYNCING" },
+        ok:      { bg: UI.black, border: UI.success, color: UI.success, label: "SAVED REMOTE" },
+        empty:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "NO DATA" },
+        error:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "SYNC ERROR" },
+      }[syncStatus];
+
+      const importStyles = {
+        idle:      { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: "IMPORT SHEET" },
+        importing: { bg: UI.black, border: UI.borderVisible, color: UI.disabled, label: "IMPORTING" },
+        ok:        { bg: UI.black, border: UI.success, color: UI.success, label: "IMPORTED" },
+        empty:     { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "NO ROWS" },
+        error:     { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "IMPORT ERROR" },
+      }[importStatus];
+
+      if (selectedPhase !== "phase1") {
+        return <PhaseLanding onSelect={openPhase} />;
+      }
+
+      return (
+        <div style={{ fontFamily: UI.sans, background: "transparent", minHeight: "100vh", color: UI.primary, paddingBottom: 80 }}>
+
+          {/* Header */}
+          <div style={{ background: "rgba(0,0,0,0.94)", borderBottom: `1px solid ${UI.border}`, padding: "20px 16px 18px", position: "sticky", top: 0, zIndex: 10 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                <div style={{ fontFamily: UI.displayFont, fontSize: 52, lineHeight: 0.86, letterSpacing: "-0.06em", color: UI.display }}>{activeDay.replace("Day ", "D")}</div>
+                <div style={{ paddingTop: 2 }}>
+                  <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary }}>PHASE 1 TRACKER</div>
+                  <div style={{ fontSize: 24, lineHeight: 1.08, letterSpacing: "-0.03em", color: UI.display, marginTop: 3 }}>{activeWeekLabel} / {progressLabel}</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: UI.disabled, marginTop: 5 }}>WORKING SETS LOGGED</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: "column" }}>
+                {saveStatus === "saved" && <div style={{ fontSize: 11, color: UI.success, fontFamily: UI.mono, letterSpacing: "0.08em" }}>[SAVED]</div>}
+                <button onClick={importFromSheets} disabled={importStatus === "importing"} style={{
+                  background: importStyles.bg, border: `1px solid ${importStyles.border}`,
+                  borderRadius: 4, cursor: importStatus === "importing" ? "default" : "pointer",
+                  padding: "8px 11px", color: importStyles.color,
+                  fontFamily: UI.mono,
+                  fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+                  transition: UI.ease, whiteSpace: "nowrap"
+                }}>
+                  {importStyles.label}
+                </button>
+                <button onClick={syncToSheets} disabled={syncStatus === "syncing"} style={{
+                  background: syncStyles.bg, border: `1px solid ${syncStyles.border}`,
+                  borderRadius: 4, cursor: syncStatus === "syncing" ? "default" : "pointer",
+                  padding: "8px 11px", color: syncStyles.color,
+                  fontFamily: UI.mono,
+                  fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+                  transition: UI.ease, whiteSpace: "nowrap"
+                }}>
+                  {syncStyles.label}
+                </button>
+              </div>
+            </div>
+            <div style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <button onClick={() => setSelectedPhase(null)} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+                ALL PHASES
+              </button>
+            </div>
+          </div>
+
+          {/* Week Tabs */}
+          <div style={{ background: UI.black, borderBottom: `1px solid ${UI.border}`, padding: "0 16px", display: "flex", gap: 0, overflowX: "auto" }}>
+            {WEEKS.map(w => (
+              <button key={w} onClick={() => setActiveWeek(w)} style={{
+                background: "none", border: "none", cursor: "pointer",
+                padding: "13px 14px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
+                fontFamily: UI.mono,
+                color: activeWeek === w ? UI.display : UI.disabled,
+                borderBottom: activeWeek === w ? `1px solid ${UI.accent}` : "1px solid transparent",
+                whiteSpace: "nowrap"
+              }}>
+                {w === "W5 (Deload)" ? "W5 DELOAD" : w}
+              </button>
+            ))}
+          </div>
+
+          {/* Day Selector */}
+          <div style={{ padding: "16px", display: "flex", gap: 8, overflowX: "auto" }}>
+            {DAYS.map(d => {
+              const dayEx = PROGRAM[d] || [];
+              const logged = dayEx.filter(e => getVal(d, e.name, "weight") || getType(d, e.name) === "bw").length;
+              return (
+                <button key={d} onClick={() => setActiveDay(d)} style={{
+                  background: activeDay === d ? UI.display : UI.black,
+                  border: `1px solid ${activeDay === d ? UI.display : UI.borderVisible}`,
+                  borderRadius: 4, cursor: "pointer", padding: "9px 12px",
+                  color: activeDay === d ? UI.black : UI.secondary,
+                  fontFamily: UI.mono,
+                  fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", whiteSpace: "nowrap", minWidth: 70,
+                  transition: UI.ease
+                }}>
+                  <div>{d.split(" ").slice(0, 2).join(" ").toUpperCase()}</div>
+                  <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.62, marginTop: 4 }}>{logged}/{dayEx.length}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Deload Banner */}
+          {activeWeek === "W5 (Deload)" && (
+            <div style={{ margin: "0 16px 24px", padding: "12px 14px", background: UI.black, border: `1px solid ${UI.warning}`, borderRadius: 4, fontFamily: UI.mono, fontSize: 11, color: UI.warning, lineHeight: 1.5, letterSpacing: "0.03em" }}>
+              [DELOAD] CUT LOADS 40-50%. 2 SETS PER EXERCISE. EASY IS THE POINT.
+            </div>
+          )}
+
+          {/* Exercises */}
+          <div style={{ padding: "0 16px" }}>
+            {sections.map(section => {
+              const sectionExercises = exercises.filter(e => e.section === section);
+              const color = SECTION_COLORS[section] || "#888";
+              return (
+                <div key={section} style={{ marginBottom: 32 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 8, height: 8, background: color, borderRadius: 99 }} />
+                      <span style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary }}>{section}</span>
+                    </div>
+                    <span style={{ fontFamily: UI.mono, fontSize: 10, letterSpacing: "0.08em", color: UI.disabled }}>{sectionExercises.length} ITEMS</span>
+                  </div>
+
+                  {sectionExercises.map(ex => {
+                    const wVal = getVal(activeDay, ex.name, "weight");
+                    const cVal = getVal(activeDay, ex.name, "comment");
+                    const exType = getType(activeDay, ex.name);
+                    const isBW = exType === "bw";
+                    const isExpanded = expandedCue === `${activeDay}||${ex.name}`;
+                    const prev = getPrevWeight(weights, activeDay, ex.name, activeWeek);
+                    const isLogged = wVal || isBW;
+
+                    return (
+                      <div key={ex.name} style={{
+                        background: isLogged ? UI.surface : "rgba(17,17,17,0.78)",
+                        border: `1px solid ${isLogged ? UI.borderVisible : UI.border}`,
+                        borderLeft: `2px solid ${isLogged ? color : UI.border}`,
+                        borderRadius: 6, marginBottom: 8,
+                        boxShadow: "none"
+                      }}>
+                        <div style={{ padding: "13px 14px" }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+
+                            {/* Left: name + badges */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 15, fontWeight: 500, color: isLogged ? UI.display : UI.primary, lineHeight: 1.25, letterSpacing: "-0.01em" }}>{ex.name}</div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>{ex.sets}x{ex.reps}</span>
+                                <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>RPE {ex.rpe}</span>
+                                {prev && (
+                                  <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.warning, background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 3, padding: "3px 6px" }}>
+                                    {prev.week}: {prev.weight}{isBW ? "" : "kg"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Right: type toggle + weight input */}
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder={isBW ? "BW" : "kg"}
+                                value={isBW ? "" : wVal}
+                                disabled={isBW}
+                                onChange={e => handleWeight(activeDay, ex.name, e.target.value)}
+                                style={{
+                                  width: 72, background: isBW ? UI.surface : UI.black,
+                                  border: `1px solid ${wVal && !isBW ? UI.display : isBW ? UI.borderVisible : UI.borderVisible}`,
+                                  borderRadius: 4, padding: "7px 9px",
+                                  color: isBW ? UI.disabled : wVal ? UI.display : UI.disabled,
+                                  fontSize: 13, fontFamily: UI.mono,
+                                  fontWeight: 700, outline: "none", textAlign: "center",
+                                  letterSpacing: "0.02em"
+                                }}
+                              />
+                              <TypeToggle value={exType} onChange={(t) => handleType(activeDay, ex.name, t)} />
+                              {ex.cue && (
+                                <button onClick={() => setExpandedCue(isExpanded ? null : `${activeDay}||${ex.name}`)} style={{
+                                  background: "none", border: "none", cursor: "pointer",
+                                  color: UI.disabled, fontSize: 10, padding: 0,
+                                  fontFamily: UI.mono, letterSpacing: "0.08em"
+                                }}>
+                                  {isExpanded ? "HIDE CUE" : "SHOW CUE"}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {isExpanded && ex.cue && (
+                            <div style={{ marginTop: 12, padding: "9px 10px", background: UI.black, borderRadius: 4, borderLeft: `2px solid ${color}`, fontSize: 12, color: UI.secondary, lineHeight: 1.5 }}>
+                              {ex.cue}
+                            </div>
+                          )}
+
+                          <input
+                            type="text" placeholder="notes..."
+                            value={cVal}
+                            onChange={e => handleComment(activeDay, ex.name, e.target.value)}
+                            style={{
+                              width: "100%", marginTop: 10, background: UI.black,
+                              border: `1px solid ${UI.border}`, borderRadius: 4, padding: "7px 9px",
+                              color: UI.secondary, fontSize: 12, outline: "none", fontFamily: UI.sans
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
