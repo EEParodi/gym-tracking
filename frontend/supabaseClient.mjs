@@ -31,7 +31,10 @@ export async function signupWithEmail(email, password) {
 
 export async function sendMagicLink(email) {
   const client = getClient();
-  return client.auth.signInWithOtp({ email });
+  const redirectTo = typeof window !== "undefined"
+    ? `${window.location.origin}${window.location.pathname}`
+    : undefined;
+  return client.auth.signInWithOtp({ email, options: redirectTo ? { emailRedirectTo: redirectTo } : undefined });
 }
 
 export async function getSession() {
