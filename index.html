@@ -327,6 +327,7 @@
         const weekKeys = ["W1", "W2", "W3", "W4"];
         let total = 0, logged = 0;
         for (const day of Object.keys(PROGRAM)) {
+          if (day === "Day 5 (Optional)") continue;
           const exercises = PROGRAM[day].filter(e => e.section !== "WARM UP");
           for (const ex of exercises) {
             total++;
