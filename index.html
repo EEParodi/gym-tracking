@@ -330,10 +330,10 @@
           if (day === "Day 5 (Optional)") continue;
           const exercises = PROGRAM[day].filter(e => e.section !== "WARM UP");
           for (const ex of exercises) {
-            total++;
             for (const wk of weekKeys) {
+              total++;
               const key = `${day}||${ex.name}`;
-              if (weights[key]?.[wk]?.weight) { logged++; break; }
+              if (weights[key]?.[wk]?.weight) { logged++; }
             }
           }
         }
