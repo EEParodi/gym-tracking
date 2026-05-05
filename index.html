@@ -333,12 +333,12 @@
             for (const wk of weekKeys) {
               total++;
               const key = `${day}||${ex.name}`;
-              if (weights[key]?.[wk]?.weight) { logged++; }
+              if (weights[key]?.[wk]?.weight || types[key] === "bw") { logged++; }
             }
           }
         }
         return total > 0 && logged >= total;
-      }, [weights]);
+      }, [weights, types]);
 
       const openPhase = (phaseId) => {
         setSelectedPhase(phaseId);
