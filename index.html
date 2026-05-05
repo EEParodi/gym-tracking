@@ -135,7 +135,7 @@
 
     const PHASES = [
       { id: "phase1", label: "PHASE 1", status: "ACTIVE", description: "Current training tracker. Weeks, days, weights, cues, notes." },
-      { id: "phase2", label: "PHASE 2", status: "PLANNED", description: "Future Supabase-backed multi-device tracker." },
+      { id: "phase2", label: "PHASE 2", status: "READY", description: "Multi-device tracker with RPE support." },
       { id: "phase3", label: "PHASE 3", status: "PLANNED", description: "Future analysis, progression, and review layer." },
     ];
 
@@ -204,7 +204,7 @@
       );
     }
 
-    function PhaseLanding({ onSelect, cloudUser, authEmail, setAuthEmail, authStatus, onLogin }) {
+    function PhaseLanding({ onSelect, cloudUser, authEmail, setAuthEmail, authStatus, onLogin, phaseCompleted }) {
       return (
         <div style={{ minHeight: "100vh", padding: "28px 16px 64px", color: UI.primary, fontFamily: UI.sans }}>
           <div style={{ maxWidth: 720, margin: "0 auto" }}>
@@ -217,7 +217,8 @@
             <div style={{ display: "grid", gap: 10, marginTop: 48 }}>
               {PHASES.map((phase, index) => {
                 const isActive = phase.id === "phase1";
-                const canOpen = isActive && !!cloudUser;
+                const canOpen = (isActive && !!cloudUser) || (isActive && phaseCompleted);
+                const isComplete = phase.id === "phase1" && phaseCompleted;
                 return (
                   <button
                     key={phase.id}
@@ -226,7 +227,7 @@
                     style={{
                       background: canOpen ? UI.surface : "rgba(17,17,17,0.58)",
                       border: `1px solid ${canOpen ? UI.borderVisible : UI.border}`,
-                      borderLeft: `2px solid ${canOpen ? UI.accent : UI.border}`,
+                      borderLeft: `2px solid ${isComplete ? UI.success : (canOpen ? UI.accent : UI.border)}`,
                       borderRadius: 6,
                       padding: "18px 16px",
                       color: canOpen ? UI.primary : UI.disabled,
@@ -242,7 +243,7 @@
                         <div style={{ fontSize: 13, lineHeight: 1.45, color: canOpen ? UI.secondary : UI.disabled, marginTop: 10 }}>{phase.description}</div>
                       </div>
                       <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: canOpen ? UI.accent : UI.disabled }}>
-                        {canOpen ? "OPEN" : (isActive ? "LOGIN" : "LOCKED")}
+                        {isComplete ? "COMPLETE" : (canOpen ? "OPEN" : (isActive ? "LOGIN" : "LOCKED"))}
                       </div>
                     </div>
                   </button>
@@ -318,6 +319,25 @@
       const [selectedPhase, setSelectedPhase] = useState(() => {
         try { return localStorage.getItem(LAST_PHASE_KEY) || null; } catch (_) { return null; }
       });
+      const [phaseCompleted, setPhaseCompleted] = useState(() => {
+        try { return localStorage.getItem("phase1_completed") === "true"; } catch (_) { return false; }
+      });
+
+      const isPhaseComplete = useCallback(() => {
+        const weekKeys = ["W1", "W2", "W3", "W4"];
+        let total = 0, logged = 0;
+        for (const day of Object.keys(PROGRAM)) {
+          const exercises = PROGRAM[day].filter(e => e.section !== "WARM UP");
+          for (const ex of exercises) {
+            total++;
+            for (const wk of weekKeys) {
+              const key = `${day}||${ex.name}`;
+              if (weights[key]?.[wk]?.weight) { logged++; break; }
+            }
+          }
+        }
+        return total > 0 && logged >= total;
+      }, [weights]);
 
       const openPhase = (phaseId) => {
         setSelectedPhase(phaseId);
@@ -517,7 +537,7 @@
       }[importStatus];
 
       if (selectedPhase !== "phase1" || !cloudUser) {
-        return <PhaseLanding onSelect={openPhase} cloudUser={cloudUser} authEmail={authEmail} setAuthEmail={setAuthEmail} authStatus={authStatus} onLogin={sendLoginLink} />;
+        return <PhaseLanding onSelect={openPhase} cloudUser={cloudUser} authEmail={authEmail} setAuthEmail={setAuthEmail} authStatus={authStatus} onLogin={sendLoginLink} phaseCompleted={phaseCompleted} />;
       }
 
       return (
@@ -561,9 +581,58 @@
               </div>
             </div>
             <div style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <button onClick={() => setSelectedPhase(null)} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
-                ALL PHASES
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setSelectedPhase(null)} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+                  ALL PHASES
+                </button>
+                {!phaseCompleted && isPhaseComplete() && (
+                  <button onClick={() => {
+                    if (confirm("End Phase 1? This will freeze the phase and mark it as complete.")) {
+                      setPhaseCompleted(true);
+                      try { localStorage.setItem("phase1_completed", "true"); } catch (_) {}
+                    }
+                  }} style={{ background: UI.accent, border: `1px solid ${UI.accent}`, borderRadius: 4, padding: "7px 10px", color: UI.black, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+                    END PHASE
+                  </button>
+                )}
+                {phaseCompleted && (
+                  <button onClick={() => {
+                    if (confirm("Reopen Phase 1 for edits? This will allow new entries.")) {
+                      setPhaseCompleted(false);
+                      try { localStorage.setItem("phase1_completed", "false"); } catch (_) {}
+                    }
+                  }} style={{ background: UI.black, border: `1px solid ${UI.warning}`, borderRadius: 4, padding: "7px 10px", color: UI.warning, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+                    EDIT LOG
+                  </button>
+                )}
+                {phaseCompleted && (
+                  <button onClick={() => {
+                    const rows = [];
+                    rows.push(["Exercise", "Section", "Week", "Day", "Weight", "Type", "Comment"].join(","));
+                    for (const day of Object.keys(PROGRAM)) {
+                      for (const ex of PROGRAM[day]) {
+                        for (const wk of ["W1", "W2", "W3", "W4", "W5 (Deload)"]) {
+                          const key = `${day}||${ex.name}`;
+                          const w = weights[key]?.[wk];
+                          if (w?.weight) {
+                            rows.push([`"${ex.name}"`, `"${ex.section}"`, `"${wk}"`, `"${day}"`, w.weight || "", `"${types[key] || ""}"`, `"${(w.comment || "").replace(/"/g, '""')}"`].join(","));
+                          }
+                        }
+                      }
+                    }
+                    const csv = rows.join("\n");
+                    const blob = new Blob([csv], { type: "text/csv" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `phase1_export_${new Date().toISOString().slice(0, 10)}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+                    EXPORT CSV
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
