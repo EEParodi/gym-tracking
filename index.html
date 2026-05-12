@@ -242,29 +242,24 @@
       );
     }
 
-    function RPEInput({ value, onChange, prescribed }) {
+    function RPEInput({ value, onChange }) {
       return (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
-          <div style={{ fontFamily: UI.mono, fontSize: 9, letterSpacing: "0.08em", color: UI.disabled }}>
-            RPE{prescribed && prescribed !== "—" ? ` (tgt ${prescribed})` : ""}
-          </div>
-          <input
-            type="text"
-            inputMode="decimal"
-            placeholder="0–10"
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            style={{
-              width: 52, background: UI.black,
-              border: `1px solid ${value ? UI.display : UI.borderVisible}`,
-              borderRadius: 4, padding: "7px 6px",
-              color: value ? UI.display : UI.disabled,
-              fontSize: 12, fontFamily: UI.mono,
-              fontWeight: 700, outline: "none", textAlign: "center",
-              letterSpacing: "0.02em",
-            }}
-          />
-        </div>
+        <input
+          type="text"
+          inputMode="decimal"
+          placeholder="RPE"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          style={{
+            width: 52, background: UI.black,
+            border: `1px solid ${value ? UI.display : UI.borderVisible}`,
+            borderRadius: 4, padding: "7px 6px",
+            color: value ? UI.display : UI.disabled,
+            fontSize: 12, fontFamily: UI.mono,
+            fontWeight: 700, outline: "none", textAlign: "center",
+            letterSpacing: "0.02em",
+          }}
+        />
       );
     }
 
