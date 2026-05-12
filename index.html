@@ -1195,7 +1195,6 @@
 
                   {!isCollapsed && sectionExercises.map(ex => {
                     const wVal = getVal(activeDay, ex.name, "weight");
-                    const cVal = getVal(activeDay, ex.name, "comment");
                     const rpeVal = getRPE(activeDay, ex.name);
                     const exType = getType(activeDay, ex.name);
                     const isBW = exType === "bw";
@@ -1235,8 +1234,8 @@
                               </div>
                             </div>
 
-                            {/* Right: weight + RPE inputs + type toggle */}
-                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                            {/* Right: weight + RPE inputs + type toggle — single row */}
+                            <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 6 }}>
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -1268,17 +1267,6 @@
                               {ex.cue}
                             </div>
                           )}
-
-                          <input
-                            type="text" placeholder="notes..."
-                            value={cVal}
-                            onChange={e => handleComment(activeDay, ex.name, e.target.value)}
-                            style={{
-                              width: "100%", marginTop: 10, background: UI.black,
-                              border: `1px solid ${UI.border}`, borderRadius: 4, padding: "7px 9px",
-                              color: UI.secondary, fontSize: 12, outline: "none", fontFamily: UI.sans
-                            }}
-                          />
                         </div>
                       </div>
                     );
