@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>Phase 1 Tracker</title>
+  <title>Training Tracker</title>
   <link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -50,8 +50,11 @@
   <script type="text/babel">
     const { useState, useEffect, useCallback } = React;
 
+    // === PROGRAM DATA ===
+
     const DAYS = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5 (Optional)"];
     const WEEKS = ["W1", "W2", "W3", "W4", "W5 (Deload)"];
+
     const PROGRAM = {
       "Day 1": [
         { section: "WARM UP", name: "Ankle Mobility (knee-to-wall)", sets: 2, reps: "1 min/side", rpe: "—", cue: "Knee tracks over toe. Essential for landing mechanics." },
@@ -114,6 +117,29 @@
       ],
     };
 
+    // Phase 2 program — fill in exercises when ready
+    const PROGRAM_P2 = {
+      "Day 1": [
+        { section: "WARM UP", name: "Warm-Up D1 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 warm-up exercises." },
+        { section: "SQUAT", name: "Main Lift D1 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 squat exercise." },
+      ],
+      "Day 2": [
+        { section: "WARM UP", name: "Warm-Up D2 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 warm-up exercises." },
+        { section: "PRESS", name: "Main Lift D2 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 press exercise." },
+      ],
+      "Day 3": [
+        { section: "WARM UP", name: "Warm-Up D3 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 warm-up exercises." },
+        { section: "HAMS", name: "Main Lift D3 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 hinge/hamstring exercise." },
+      ],
+      "Day 4": [
+        { section: "WARM UP", name: "Warm-Up D4 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 warm-up exercises." },
+        { section: "PRESS", name: "Main Lift D4 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 horizontal press exercise." },
+      ],
+      "Day 5 (Optional)": [
+        { section: "CARRY", name: "Conditioning (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 conditioning work." },
+      ],
+    };
+
     const SECTION_COLORS = {
       "WARM UP": "#4b5563", "PLYO": "#7c3aed", "SQUAT": "#d97706",
       "HAMS": "#d97706", "HINGE": "#d97706", "UNI": "#d97706",
@@ -129,13 +155,23 @@
       )
     );
 
-    const STORAGE_KEY = "phase1-tracker-v1";
-    const TYPES_KEY = "phase1-types-v1";
-    const LAST_PHASE_KEY = "phase-tracker-last-phase";
+    const TRACKER_META_P2 = Object.fromEntries(
+      Object.entries(PROGRAM_P2).flatMap(([day, exercises]) =>
+        exercises.map(ex => [`${day}||${ex.name}`, { section: ex.section, sets: ex.sets, reps: ex.reps }])
+      )
+    );
+
+    // === STORAGE KEYS ===
+    const STORAGE_KEY      = "phase1-tracker-v1";
+    const TYPES_KEY        = "phase1-types-v1";
+    const STORAGE_KEY_P2   = "phase2-tracker-v1";
+    const TYPES_KEY_P2     = "phase2-types-v1";
+    const RPE_KEY_P2       = "phase2-rpe-v1";
+    const LAST_PHASE_KEY   = "phase-tracker-last-phase";
 
     const PHASES = [
       { id: "phase1", label: "PHASE 1", status: "ACTIVE", description: "Current training tracker. Weeks, days, weights, cues, notes." },
-      { id: "phase2", label: "PHASE 2", status: "READY", description: "Multi-device tracker with RPE support." },
+      { id: "phase2", label: "PHASE 2", status: "READY", description: "Continues training with RPE logging per set. Unlocks after Phase 1." },
       { id: "phase3", label: "PHASE 3", status: "PLANNED", description: "Future analysis, progression, and review layer." },
     ];
 
@@ -158,7 +194,8 @@
       ease: "all 0.18s cubic-bezier(0.25, 0.1, 0.25, 1)",
     };
 
-    // Returns the weight logged in the most recent previous week
+    // === HELPERS ===
+
     function getPrevWeight(weights, day, exercise, currentWeek) {
       const weekIdx = WEEKS.indexOf(currentWeek);
       if (weekIdx <= 0) return null;
@@ -175,12 +212,13 @@
       { id: "bw",  label: "BW",  title: "Bodyweight" },
     ];
 
+    // === COMPONENTS ===
+
     function TypeToggle({ value, onChange }) {
       return (
         <div style={{ display: "flex", gap: 3 }}>
           {TYPE_OPTIONS.map(opt => {
             const active = value === opt.id;
-            const isBW = opt.id === "bw";
             return (
               <button
                 key={opt.id}
@@ -204,7 +242,33 @@
       );
     }
 
-    function PhaseLanding({ onSelect, cloudUser, authEmail, setAuthEmail, authStatus, onLogin, phaseCompleted }) {
+    function RPEInput({ value, onChange, prescribed }) {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+          <div style={{ fontFamily: UI.mono, fontSize: 9, letterSpacing: "0.08em", color: UI.disabled }}>
+            RPE{prescribed && prescribed !== "—" ? ` (tgt ${prescribed})` : ""}
+          </div>
+          <input
+            type="text"
+            inputMode="decimal"
+            placeholder="0–10"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            style={{
+              width: 52, background: UI.black,
+              border: `1px solid ${value ? UI.display : UI.borderVisible}`,
+              borderRadius: 4, padding: "7px 6px",
+              color: value ? UI.display : UI.disabled,
+              fontSize: 12, fontFamily: UI.mono,
+              fontWeight: 700, outline: "none", textAlign: "center",
+              letterSpacing: "0.02em",
+            }}
+          />
+        </div>
+      );
+    }
+
+    function PhaseLanding({ onSelect, cloudUser, authEmail, setAuthEmail, authStatus, onLogin, phase1Completed }) {
       return (
         <div style={{ minHeight: "100vh", padding: "28px 16px 64px", color: UI.primary, fontFamily: UI.sans }}>
           <div style={{ maxWidth: 720, margin: "0 auto" }}>
@@ -216,18 +280,29 @@
 
             <div style={{ display: "grid", gap: 10, marginTop: 48 }}>
               {PHASES.map((phase, index) => {
-                const isActive = phase.id === "phase1";
-                const canOpen = (isActive && !!cloudUser) || (isActive && phaseCompleted);
-                const isComplete = phase.id === "phase1" && phaseCompleted;
+                const isPhase1 = phase.id === "phase1";
+                const isPhase2 = phase.id === "phase2";
+                const isComplete = isPhase1 && phase1Completed;
+                const canOpen =
+                  (isPhase1 && (!!cloudUser || phase1Completed)) ||
+                  (isPhase2 && phase1Completed);
+                const isPending = isPhase2 && !phase1Completed;
+                const statusLabel =
+                  isComplete ? "COMPLETE" :
+                  canOpen ? "OPEN" :
+                  (isPhase1 && !cloudUser) ? "LOGIN" :
+                  isPending ? "AFTER PHASE 1" :
+                  "LOCKED";
+                const borderLeftColor = isComplete ? UI.success : canOpen ? UI.accent : isPending ? UI.warning : UI.border;
                 return (
                   <button
                     key={phase.id}
                     onClick={() => canOpen && onSelect(phase.id)}
                     disabled={!canOpen}
                     style={{
-                      background: canOpen ? UI.surface : "rgba(17,17,17,0.58)",
+                      background: canOpen ? UI.surface : isComplete ? "rgba(74,158,92,0.05)" : "rgba(17,17,17,0.58)",
                       border: `1px solid ${canOpen ? UI.borderVisible : UI.border}`,
-                      borderLeft: `2px solid ${isComplete ? UI.success : (canOpen ? UI.accent : UI.border)}`,
+                      borderLeft: `2px solid ${borderLeftColor}`,
                       borderRadius: 6,
                       padding: "18px 16px",
                       color: canOpen ? UI.primary : UI.disabled,
@@ -242,8 +317,8 @@
                         <div style={{ fontSize: 24, lineHeight: 1.05, letterSpacing: "-0.03em", color: canOpen ? UI.display : UI.secondary, marginTop: 8 }}>{phase.label}</div>
                         <div style={{ fontSize: 13, lineHeight: 1.45, color: canOpen ? UI.secondary : UI.disabled, marginTop: 10 }}>{phase.description}</div>
                       </div>
-                      <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: canOpen ? UI.accent : UI.disabled }}>
-                        {isComplete ? "COMPLETE" : (canOpen ? "OPEN" : (isActive ? "LOGIN" : "LOCKED"))}
+                      <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: canOpen ? UI.accent : isPending ? UI.warning : UI.disabled, whiteSpace: "nowrap" }}>
+                        {statusLabel}
                       </div>
                     </div>
                   </button>
@@ -301,27 +376,18 @@
       );
     }
 
-    function App() {
+    // === PHASE 1 TRACKER ===
+
+    function Phase1Tracker({ cloudUser, onBack, phase1Completed, setPhase1Completed }) {
       const [activeDay, setActiveDay] = useState("Day 1");
       const [activeWeek, setActiveWeek] = useState("W1");
       const [weights, setWeights] = useState({});
-      const [types, setTypes] = useState({});   // { "Day 1||Back Squat": "bb" | "db" | "bw" | null }
+      const [types, setTypes] = useState({});
       const [expandedCue, setExpandedCue] = useState(null);
       const [collapsedSections, setCollapsedSections] = useState({});
       const [saveStatus, setSaveStatus] = useState("");
       const [syncStatus, setSyncStatus] = useState("idle");
       const [importStatus, setImportStatus] = useState("idle");
-      const [cloudUser, setCloudUser] = useState(null);
-      const [authEmail, setAuthEmail] = useState(() => {
-        try { return window.SUPABASE_LOGIN_EMAIL || ""; } catch (_) { return ""; }
-      });
-      const [authStatus, setAuthStatus] = useState("idle");
-      const [selectedPhase, setSelectedPhase] = useState(() => {
-        try { return localStorage.getItem(LAST_PHASE_KEY) || null; } catch (_) { return null; }
-      });
-      const [phaseCompleted, setPhaseCompleted] = useState(() => {
-        try { return localStorage.getItem("phase1_completed") === "true"; } catch (_) { return false; }
-      });
 
       const isPhaseComplete = useCallback(() => {
         const weekKeys = ["W1", "W2", "W3", "W4"];
@@ -340,11 +406,7 @@
         return total > 0 && logged >= total;
       }, [weights, types]);
 
-      const openPhase = (phaseId) => {
-        setSelectedPhase(phaseId);
-        try { localStorage.setItem(LAST_PHASE_KEY, phaseId); } catch (_) {}
-      };
-
+      // Load from localStorage on mount
       useEffect(() => {
         try {
           const saved = localStorage.getItem(STORAGE_KEY);
@@ -354,19 +416,13 @@
         } catch (_) {}
       }, []);
 
+      // Sync from cloud when cloudUser is available
       useEffect(() => {
+        if (!cloudUser?.id || !window.supabase?.hydrateTrackerStateFromSupabase) return;
         let alive = true;
-
         const syncFromCloud = async () => {
-          if (!window.supabase?.getSession) return;
-          const { session } = await window.supabase.getSession();
-          const user = session?.user || null;
-          if (!alive || !user) return;
-          setCloudUser(user);
-
-          const remote = await window.supabase.hydrateTrackerStateFromSupabase(user.id);
+          const remote = await window.supabase.hydrateTrackerStateFromSupabase(cloudUser.id);
           if (!alive) return;
-
           const remoteHasData = Object.keys(remote?.weights || {}).length > 0;
           if (remoteHasData) {
             setWeights(remote.weights);
@@ -377,11 +433,10 @@
             } catch (_) {}
             return;
           }
-
-          const migrated = await window.supabase.migrateLocalToSupabaseIfNeeded(user.id);
+          const migrated = await window.supabase.migrateLocalToSupabaseIfNeeded(cloudUser.id);
           if (!alive || migrated?.error) return;
           if ((migrated?.migrated || 0) > 0) {
-            const refreshed = await window.supabase.hydrateTrackerStateFromSupabase(user.id);
+            const refreshed = await window.supabase.hydrateTrackerStateFromSupabase(cloudUser.id);
             if (!alive) return;
             setWeights(refreshed.weights || {});
             setTypes(refreshed.types || {});
@@ -391,27 +446,9 @@
             } catch (_) {}
           }
         };
-
         syncFromCloud();
         return () => { alive = false; };
-      }, []);
-
-      const sendLoginLink = async () => {
-        if (!authEmail.trim() || !window.supabase?.sendMagicLink) {
-          setAuthStatus("error");
-          setTimeout(() => setAuthStatus("idle"), 2000);
-          return;
-        }
-        setAuthStatus("sending");
-        const res = await window.supabase.sendMagicLink(authEmail.trim());
-        if (res?.error) {
-          setAuthStatus("error");
-          setTimeout(() => setAuthStatus("idle"), 3000);
-          return;
-        }
-        setAuthStatus("sent");
-        setTimeout(() => setAuthStatus("idle"), 4000);
-      };
+      }, [cloudUser?.id]);
 
       const save = useCallback((newWeights) => {
         try {
@@ -454,17 +491,11 @@
         const updated = { ...types, [key]: typeVal };
         setTypes(updated);
         saveTypes(updated);
-        // If switching to BW, clear the weight input for current week
-        if (typeVal === "bw") {
-          handleWeight(day, exercise, "");
-        }
+        if (typeVal === "bw") handleWeight(day, exercise, "");
       };
 
-      const getVal = (day, exercise, field) =>
-        weights[`${day}||${exercise}`]?.[activeWeek]?.[field] || "";
-
-      const getType = (day, exercise) =>
-        types[`${day}||${exercise}`] || null;
+      const getVal = (day, exercise, field) => weights[`${day}||${exercise}`]?.[activeWeek]?.[field] || "";
+      const getType = (day, exercise) => types[`${day}||${exercise}`] || null;
 
       const syncToCloud = async () => {
         if (!cloudUser?.id || !window.supabase?.upsertTrackerStateToSupabase) {
@@ -537,10 +568,6 @@
         error:     { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "IMPORT ERROR" },
       }[importStatus];
 
-      if (selectedPhase !== "phase1" || (!cloudUser && !phaseCompleted)) {
-        return <PhaseLanding onSelect={openPhase} cloudUser={cloudUser} authEmail={authEmail} setAuthEmail={setAuthEmail} authStatus={authStatus} onLogin={sendLoginLink} phaseCompleted={phaseCompleted} />;
-      }
-
       return (
         <div style={{ fontFamily: UI.sans, background: "transparent", minHeight: "100vh", color: UI.primary, paddingBottom: 80 }}>
 
@@ -563,8 +590,7 @@
                   background: importStyles.bg, border: `1px solid ${importStyles.border}`,
                   borderRadius: 4, cursor: importStatus === "importing" || !cloudUser ? "default" : "pointer",
                   padding: "8px 11px", color: importStyles.color,
-                  fontFamily: UI.mono,
-                  fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+                  fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
                   transition: UI.ease, whiteSpace: "nowrap"
                 }}>
                   {importStyles.label}
@@ -573,8 +599,7 @@
                   background: syncStyles.bg, border: `1px solid ${syncStyles.border}`,
                   borderRadius: 4, cursor: syncStatus === "syncing" || !cloudUser ? "default" : "pointer",
                   padding: "8px 11px", color: syncStyles.color,
-                  fontFamily: UI.mono,
-                  fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+                  fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
                   transition: UI.ease, whiteSpace: "nowrap"
                 }}>
                   {syncStyles.label}
@@ -582,47 +607,45 @@
               </div>
             </div>
             <div style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => setSelectedPhase(null)} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={onBack} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
                   ALL PHASES
                 </button>
-                {!phaseCompleted && isPhaseComplete() && (
+                {!phase1Completed && isPhaseComplete() && (
                   <button onClick={() => {
                     if (confirm("End Phase 1? This will freeze the phase and mark it as complete.")) {
-                      setPhaseCompleted(true);
+                      setPhase1Completed(true);
                       try { localStorage.setItem("phase1_completed", "true"); } catch (_) {}
                     }
                   }} style={{ background: UI.accent, border: `1px solid ${UI.accent}`, borderRadius: 4, padding: "7px 10px", color: UI.black, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
                     END PHASE
                   </button>
                 )}
-                {phaseCompleted && (
+                {phase1Completed && (
                   <button onClick={() => {
                     if (confirm("Reopen Phase 1 for edits? This will allow new entries.")) {
-                      setPhaseCompleted(false);
+                      setPhase1Completed(false);
                       try { localStorage.setItem("phase1_completed", "false"); } catch (_) {}
                     }
                   }} style={{ background: UI.black, border: `1px solid ${UI.warning}`, borderRadius: 4, padding: "7px 10px", color: UI.warning, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
                     EDIT LOG
                   </button>
                 )}
-                {phaseCompleted && (
+                {phase1Completed && (
                   <button onClick={() => {
-                    const rows = [];
-                    rows.push(["Exercise", "Section", "Week", "Day", "Weight", "Type", "Comment"].join(","));
+                    const rows = [["Exercise", "Section", "Week", "Day", "Weight", "Type", "Comment"].join(",")];
                     for (const day of Object.keys(PROGRAM)) {
                       for (const ex of PROGRAM[day]) {
-                        for (const wk of ["W1", "W2", "W3", "W4", "W5 (Deload)"]) {
+                        for (const wk of WEEKS) {
                           const key = `${day}||${ex.name}`;
                           const w = weights[key]?.[wk];
-                          if (w?.weight) {
-                            rows.push([`"${ex.name}"`, `"${ex.section}"`, `"${wk}"`, `"${day}"`, w.weight || "", `"${types[key] || ""}"`, `"${(w.comment || "").replace(/"/g, '""')}"`].join(","));
+                          if (w?.weight || types[key] === "bw") {
+                            rows.push([`"${ex.name}"`, `"${ex.section}"`, `"${wk}"`, `"${day}"`, w?.weight || "", `"${types[key] || ""}"`, `"${(w?.comment || "").replace(/"/g, '""')}"`].join(","));
                           }
                         }
                       }
                     }
-                    const csv = rows.join("\n");
-                    const blob = new Blob([csv], { type: "text/csv" });
+                    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
@@ -664,9 +687,8 @@
                   border: `1px solid ${activeDay === d ? UI.display : UI.borderVisible}`,
                   borderRadius: 4, cursor: "pointer", padding: "9px 12px",
                   color: activeDay === d ? UI.black : UI.secondary,
-                  fontFamily: UI.mono,
-                  fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", whiteSpace: "nowrap", minWidth: 70,
-                  transition: UI.ease
+                  fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+                  whiteSpace: "nowrap", minWidth: 70, transition: UI.ease
                 }}>
                   <div>{d.split(" ").slice(0, 2).join(" ").toUpperCase()}</div>
                   <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.62, marginTop: 4 }}>{logged}/{dayEx.length}</div>
@@ -690,23 +712,19 @@
               const sectionLoggedCount = sectionExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").length;
               const isWarmUp = section === "WARM UP";
               const isWarmUpComplete = isWarmUp && sectionExercises.length > 0 && sectionLoggedCount === sectionExercises.length;
-              const isCollapsed = isWarmUp && (collapsedSections[section] ?? isWarmUpComplete);
+              // Fix 1b: key collapse state per day+section so days don't share collapsed state
+              const collapseKey = `${activeDay}||${section}`;
+              const isCollapsed = isWarmUp && (collapsedSections[collapseKey] ?? isWarmUpComplete);
               return (
                 <div key={section} style={{ marginBottom: 32 }}>
                   <button
-                    onClick={() => isWarmUp && setCollapsedSections(prev => ({ ...prev, [section]: !isCollapsed }))}
+                    onClick={() => isWarmUp && setCollapsedSections(prev => ({ ...prev, [collapseKey]: !isCollapsed }))}
                     style={{
-                      width: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
+                      width: "100%", display: "flex", alignItems: "center",
+                      justifyContent: "space-between", gap: 12,
                       marginBottom: isCollapsed ? 0 : 12,
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      cursor: isWarmUp ? "pointer" : "default",
-                      textAlign: "left",
+                      background: "none", border: "none", padding: 0,
+                      cursor: isWarmUp ? "pointer" : "default", textAlign: "left",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -733,13 +751,15 @@
                         border: `1px solid ${isLogged ? UI.borderVisible : UI.border}`,
                         borderLeft: `2px solid ${isLogged ? color : UI.border}`,
                         borderRadius: 6, marginBottom: 8,
-                        boxShadow: "none"
                       }}>
                         <div style={{ padding: "13px 14px" }}>
                           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
 
-                            {/* Left: name + badges */}
-                            <div style={{ flex: 1 }}>
+                            {/* Fix 1c: left column is tappable for cue expand */}
+                            <div
+                              onClick={() => ex.cue && setExpandedCue(isExpanded ? null : `${activeDay}||${ex.name}`)}
+                              style={{ flex: 1, cursor: ex.cue ? "pointer" : "default" }}
+                            >
                               <div style={{ fontSize: 15, fontWeight: 500, color: isLogged ? UI.display : UI.primary, lineHeight: 1.25, letterSpacing: "-0.01em" }}>{ex.name}</div>
                               <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
                                 <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>{ex.sets}x{ex.reps}</span>
@@ -749,10 +769,15 @@
                                     {prev.week}: {prev.weight}{isBW ? "" : "kg"}
                                   </span>
                                 )}
+                                {ex.cue && (
+                                  <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled }}>
+                                    {isExpanded ? "▲ CUE" : "▼ CUE"}
+                                  </span>
+                                )}
                               </div>
                             </div>
 
-                            {/* Right: type toggle + weight input */}
+                            {/* Right: weight input + type toggle */}
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                               <input
                                 type="text"
@@ -763,7 +788,7 @@
                                 onChange={e => handleWeight(activeDay, ex.name, e.target.value)}
                                 style={{
                                   width: 72, background: isBW ? UI.surface : UI.black,
-                                  border: `1px solid ${wVal && !isBW ? UI.display : isBW ? UI.borderVisible : UI.borderVisible}`,
+                                  border: `1px solid ${wVal && !isBW ? UI.display : UI.borderVisible}`,
                                   borderRadius: 4, padding: "7px 9px",
                                   color: isBW ? UI.disabled : wVal ? UI.display : UI.disabled,
                                   fontSize: 13, fontFamily: UI.mono,
@@ -772,15 +797,6 @@
                                 }}
                               />
                               <TypeToggle value={exType} onChange={(t) => handleType(activeDay, ex.name, t)} />
-                              {ex.cue && (
-                                <button onClick={() => setExpandedCue(isExpanded ? null : `${activeDay}||${ex.name}`)} style={{
-                                  background: "none", border: "none", cursor: "pointer",
-                                  color: UI.disabled, fontSize: 10, padding: 0,
-                                  fontFamily: UI.mono, letterSpacing: "0.08em"
-                                }}>
-                                  {isExpanded ? "HIDE CUE" : "SHOW CUE"}
-                                </button>
-                              )}
                             </div>
                           </div>
 
@@ -809,6 +825,544 @@
             })}
           </div>
         </div>
+      );
+    }
+
+    // === PHASE 2 TRACKER ===
+
+    function Phase2Tracker({ cloudUser, onBack }) {
+      const [activeDay, setActiveDay] = useState("Day 1");
+      const [activeWeek, setActiveWeek] = useState("W1");
+      const [weights, setWeights] = useState({});
+      const [types, setTypes] = useState({});
+      const [rpeLog, setRpeLog] = useState({});
+      const [expandedCue, setExpandedCue] = useState(null);
+      const [collapsedSections, setCollapsedSections] = useState({});
+      const [saveStatus, setSaveStatus] = useState("");
+      const [syncStatus, setSyncStatus] = useState("idle");
+      const [importStatus, setImportStatus] = useState("idle");
+      const [phaseCompleted, setPhaseCompleted] = useState(() => {
+        try { return localStorage.getItem("phase2_completed") === "true"; } catch (_) { return false; }
+      });
+
+      const isPhaseComplete = useCallback(() => {
+        const weekKeys = ["W1", "W2", "W3", "W4"];
+        let total = 0, logged = 0;
+        for (const day of Object.keys(PROGRAM_P2)) {
+          if (day === "Day 5 (Optional)") continue;
+          const exercises = PROGRAM_P2[day].filter(e => e.section !== "WARM UP");
+          for (const ex of exercises) {
+            for (const wk of weekKeys) {
+              total++;
+              const key = `${day}||${ex.name}`;
+              if (weights[key]?.[wk]?.weight || types[key] === "bw") { logged++; }
+            }
+          }
+        }
+        return total > 0 && logged >= total;
+      }, [weights, types]);
+
+      // Load from localStorage on mount
+      useEffect(() => {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY_P2);
+          if (saved) setWeights(JSON.parse(saved));
+          const savedTypes = localStorage.getItem(TYPES_KEY_P2);
+          if (savedTypes) setTypes(JSON.parse(savedTypes));
+          const savedRpe = localStorage.getItem(RPE_KEY_P2);
+          if (savedRpe) setRpeLog(JSON.parse(savedRpe));
+        } catch (_) {}
+      }, []);
+
+      // Sync from cloud when cloudUser is available
+      useEffect(() => {
+        if (!cloudUser?.id || !window.supabase?.hydrateP2TrackerState) return;
+        let alive = true;
+        const syncFromCloud = async () => {
+          const remote = await window.supabase.hydrateP2TrackerState(cloudUser.id);
+          if (!alive) return;
+          const remoteHasData = Object.keys(remote?.weights || {}).length > 0;
+          if (remoteHasData) {
+            setWeights(remote.weights);
+            setTypes(remote.types);
+            setRpeLog(remote.rpeLog || {});
+            try {
+              localStorage.setItem(STORAGE_KEY_P2, JSON.stringify(remote.weights));
+              localStorage.setItem(TYPES_KEY_P2, JSON.stringify(remote.types));
+              localStorage.setItem(RPE_KEY_P2, JSON.stringify(remote.rpeLog || {}));
+            } catch (_) {}
+          }
+        };
+        syncFromCloud();
+        return () => { alive = false; };
+      }, [cloudUser?.id]);
+
+      const save = useCallback((newWeights) => {
+        try {
+          localStorage.setItem(STORAGE_KEY_P2, JSON.stringify(newWeights));
+          localStorage.setItem(LAST_PHASE_KEY, "phase2");
+          setSaveStatus("saved");
+          setTimeout(() => setSaveStatus(""), 1200);
+        } catch (_) {}
+      }, []);
+
+      const saveTypes = useCallback((newTypes) => {
+        try {
+          localStorage.setItem(TYPES_KEY_P2, JSON.stringify(newTypes));
+          localStorage.setItem(LAST_PHASE_KEY, "phase2");
+        } catch (_) {}
+      }, []);
+
+      const handleWeight = (day, exercise, value) => {
+        const key = `${day}||${exercise}`;
+        const updated = {
+          ...weights,
+          [key]: { ...(weights[key] || {}), [activeWeek]: { ...(weights[key]?.[activeWeek] || {}), weight: value } }
+        };
+        setWeights(updated);
+        save(updated);
+      };
+
+      const handleComment = (day, exercise, value) => {
+        const key = `${day}||${exercise}`;
+        const updated = {
+          ...weights,
+          [key]: { ...(weights[key] || {}), [activeWeek]: { ...(weights[key]?.[activeWeek] || {}), comment: value } }
+        };
+        setWeights(updated);
+        save(updated);
+      };
+
+      const handleType = (day, exercise, typeVal) => {
+        const key = `${day}||${exercise}`;
+        const updated = { ...types, [key]: typeVal };
+        setTypes(updated);
+        saveTypes(updated);
+        if (typeVal === "bw") handleWeight(day, exercise, "");
+      };
+
+      const handleRPE = (day, exercise, value) => {
+        const key = `${day}||${exercise}`;
+        const updated = { ...rpeLog, [key]: { ...(rpeLog[key] || {}), [activeWeek]: value } };
+        setRpeLog(updated);
+        try { localStorage.setItem(RPE_KEY_P2, JSON.stringify(updated)); } catch (_) {}
+      };
+
+      const getVal = (day, exercise, field) => weights[`${day}||${exercise}`]?.[activeWeek]?.[field] || "";
+      const getType = (day, exercise) => types[`${day}||${exercise}`] || null;
+      const getRPE = (day, exercise) => rpeLog[`${day}||${exercise}`]?.[activeWeek] || "";
+
+      const syncToCloud = async () => {
+        if (!cloudUser?.id || !window.supabase?.upsertP2TrackerState) {
+          setSyncStatus("error");
+          setTimeout(() => setSyncStatus("idle"), 2000);
+          return;
+        }
+        setSyncStatus("syncing");
+        const payload = { userId: cloudUser.id, weights, types, rpeLog, metaByKey: TRACKER_META_P2 };
+        const result = await window.supabase.upsertP2TrackerState(payload);
+        if (result?.error) {
+          setSyncStatus("error");
+          setTimeout(() => setSyncStatus("idle"), 3000);
+          return;
+        }
+        if (!Object.keys(weights).length) {
+          setSyncStatus("empty");
+          setTimeout(() => setSyncStatus("idle"), 2500);
+          return;
+        }
+        setSyncStatus("ok");
+        setTimeout(() => setSyncStatus("idle"), 3000);
+      };
+
+      const importFromCloud = async () => {
+        if (!cloudUser?.id || !window.supabase?.hydrateP2TrackerState) {
+          setImportStatus("error");
+          setTimeout(() => setImportStatus("idle"), 2000);
+          return;
+        }
+        setImportStatus("importing");
+        const remote = await window.supabase.hydrateP2TrackerState(cloudUser.id);
+        const rowsLoaded = Object.keys(remote?.weights || {}).length;
+        if (!rowsLoaded) {
+          setImportStatus("empty");
+          setTimeout(() => setImportStatus("idle"), 2500);
+          return;
+        }
+        setWeights(remote.weights || {});
+        setTypes(remote.types || {});
+        setRpeLog(remote.rpeLog || {});
+        try {
+          localStorage.setItem(STORAGE_KEY_P2, JSON.stringify(remote.weights || {}));
+          localStorage.setItem(TYPES_KEY_P2, JSON.stringify(remote.types || {}));
+          localStorage.setItem(RPE_KEY_P2, JSON.stringify(remote.rpeLog || {}));
+          localStorage.setItem(LAST_PHASE_KEY, "phase2");
+        } catch (_) {}
+        setImportStatus("ok");
+        setTimeout(() => setImportStatus("idle"), 3000);
+      };
+
+      const exercises = PROGRAM_P2[activeDay] || [];
+      const sections = [...new Set(exercises.map(e => e.section))];
+      const workingExercises = exercises.filter(e => e.section !== "WARM UP");
+      const loggedCount = workingExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").length;
+      const progressLabel = `${loggedCount}/${workingExercises.length}`;
+      const activeWeekLabel = `Week ${activeWeek.match(/\d+/)?.[0] || ""}`.trim();
+
+      const syncStyles = {
+        idle:    { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: cloudUser ? "SYNC CLOUD" : "CLOUD LOCKED" },
+        syncing: { bg: UI.black, border: UI.borderVisible, color: UI.disabled, label: "SYNCING" },
+        ok:      { bg: UI.black, border: UI.success, color: UI.success, label: "SAVED CLOUD" },
+        empty:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "NO DATA" },
+        error:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "SYNC ERROR" },
+      }[syncStatus];
+
+      const importStyles = {
+        idle:      { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: cloudUser ? "LOAD CLOUD" : "CLOUD LOCKED" },
+        importing: { bg: UI.black, border: UI.borderVisible, color: UI.disabled, label: "IMPORTING" },
+        ok:        { bg: UI.black, border: UI.success, color: UI.success, label: "LOADED" },
+        empty:     { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "NO ROWS" },
+        error:     { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "IMPORT ERROR" },
+      }[importStatus];
+
+      return (
+        <div style={{ fontFamily: UI.sans, background: "transparent", minHeight: "100vh", color: UI.primary, paddingBottom: 80 }}>
+
+          {/* Header */}
+          <div style={{ background: "rgba(0,0,0,0.94)", borderBottom: `1px solid ${UI.border}`, padding: "20px 16px 18px", position: "sticky", top: 0, zIndex: 10 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                <div style={{ fontFamily: UI.displayFont, fontSize: 44, lineHeight: 0.9, letterSpacing: "-0.06em", color: UI.display }}>PHASE 2</div>
+                <div style={{ paddingTop: 2 }}>
+                  <div style={{ fontSize: 24, lineHeight: 1.08, letterSpacing: "-0.03em", color: UI.display, marginTop: 3 }}>{activeWeekLabel}</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: UI.disabled, marginTop: 7 }}>{progressLabel} WORKING SETS LOGGED</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: "column" }}>
+                {saveStatus === "saved" && <div style={{ fontSize: 11, color: UI.success, fontFamily: UI.mono, letterSpacing: "0.08em" }}>[SAVED]</div>}
+                <div style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, letterSpacing: "0.08em" }}>
+                  {cloudUser ? `CLOUD / ${cloudUser.email || cloudUser.id}` : "CLOUD / OFFLINE"}
+                </div>
+                <button onClick={importFromCloud} disabled={importStatus === "importing" || !cloudUser} style={{
+                  background: importStyles.bg, border: `1px solid ${importStyles.border}`,
+                  borderRadius: 4, cursor: importStatus === "importing" || !cloudUser ? "default" : "pointer",
+                  padding: "8px 11px", color: importStyles.color,
+                  fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+                  transition: UI.ease, whiteSpace: "nowrap"
+                }}>
+                  {importStyles.label}
+                </button>
+                <button onClick={syncToCloud} disabled={syncStatus === "syncing" || !cloudUser} style={{
+                  background: syncStyles.bg, border: `1px solid ${syncStyles.border}`,
+                  borderRadius: 4, cursor: syncStatus === "syncing" || !cloudUser ? "default" : "pointer",
+                  padding: "8px 11px", color: syncStyles.color,
+                  fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+                  transition: UI.ease, whiteSpace: "nowrap"
+                }}>
+                  {syncStyles.label}
+                </button>
+              </div>
+            </div>
+            <div style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={onBack} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+                  ALL PHASES
+                </button>
+                {!phaseCompleted && isPhaseComplete() && (
+                  <button onClick={() => {
+                    if (confirm("End Phase 2? This will freeze the phase and mark it as complete.")) {
+                      setPhaseCompleted(true);
+                      try { localStorage.setItem("phase2_completed", "true"); } catch (_) {}
+                    }
+                  }} style={{ background: UI.accent, border: `1px solid ${UI.accent}`, borderRadius: 4, padding: "7px 10px", color: UI.black, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+                    END PHASE
+                  </button>
+                )}
+                {phaseCompleted && (
+                  <button onClick={() => {
+                    if (confirm("Reopen Phase 2 for edits? This will allow new entries.")) {
+                      setPhaseCompleted(false);
+                      try { localStorage.setItem("phase2_completed", "false"); } catch (_) {}
+                    }
+                  }} style={{ background: UI.black, border: `1px solid ${UI.warning}`, borderRadius: 4, padding: "7px 10px", color: UI.warning, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+                    EDIT LOG
+                  </button>
+                )}
+                {phaseCompleted && (
+                  <button onClick={() => {
+                    const rows = [["Exercise", "Section", "Week", "Day", "Weight", "Type", "RPE", "Comment"].join(",")];
+                    for (const day of Object.keys(PROGRAM_P2)) {
+                      for (const ex of PROGRAM_P2[day]) {
+                        for (const wk of WEEKS) {
+                          const key = `${day}||${ex.name}`;
+                          const w = weights[key]?.[wk];
+                          const rpe = rpeLog[key]?.[wk] || "";
+                          if (w?.weight || types[key] === "bw") {
+                            rows.push([`"${ex.name}"`, `"${ex.section}"`, `"${wk}"`, `"${day}"`, w?.weight || "", `"${types[key] || ""}"`, rpe, `"${(w?.comment || "").replace(/"/g, '""')}"`].join(","));
+                          }
+                        }
+                      }
+                    }
+                    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `phase2_export_${new Date().toISOString().slice(0, 10)}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+                    EXPORT CSV
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Week Tabs */}
+          <div style={{ background: UI.black, borderBottom: `1px solid ${UI.border}`, padding: "0 16px", display: "flex", gap: 0, overflowX: "auto" }}>
+            {WEEKS.map(w => (
+              <button key={w} onClick={() => setActiveWeek(w)} style={{
+                background: "none", border: "none", cursor: "pointer",
+                padding: "13px 14px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
+                fontFamily: UI.mono,
+                color: activeWeek === w ? UI.display : UI.disabled,
+                borderBottom: activeWeek === w ? `1px solid ${UI.accent}` : "1px solid transparent",
+                whiteSpace: "nowrap"
+              }}>
+                {w === "W5 (Deload)" ? "W5 DELOAD" : w}
+              </button>
+            ))}
+          </div>
+
+          {/* Day Selector */}
+          <div style={{ padding: "16px", display: "flex", gap: 8, overflowX: "auto" }}>
+            {DAYS.map(d => {
+              const dayEx = PROGRAM_P2[d] || [];
+              const logged = dayEx.filter(e => getVal(d, e.name, "weight") || getType(d, e.name) === "bw").length;
+              return (
+                <button key={d} onClick={() => setActiveDay(d)} style={{
+                  background: activeDay === d ? UI.display : UI.black,
+                  border: `1px solid ${activeDay === d ? UI.display : UI.borderVisible}`,
+                  borderRadius: 4, cursor: "pointer", padding: "9px 12px",
+                  color: activeDay === d ? UI.black : UI.secondary,
+                  fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+                  whiteSpace: "nowrap", minWidth: 70, transition: UI.ease
+                }}>
+                  <div>{d.split(" ").slice(0, 2).join(" ").toUpperCase()}</div>
+                  <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.62, marginTop: 4 }}>{logged}/{dayEx.length}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Deload Banner */}
+          {activeWeek === "W5 (Deload)" && (
+            <div style={{ margin: "0 16px 24px", padding: "12px 14px", background: UI.black, border: `1px solid ${UI.warning}`, borderRadius: 4, fontFamily: UI.mono, fontSize: 11, color: UI.warning, lineHeight: 1.5, letterSpacing: "0.03em" }}>
+              [DELOAD] CUT LOADS 40-50%. 2 SETS PER EXERCISE. EASY IS THE POINT.
+            </div>
+          )}
+
+          {/* Exercises */}
+          <div style={{ padding: "0 16px" }}>
+            {sections.map(section => {
+              const sectionExercises = exercises.filter(e => e.section === section);
+              const color = SECTION_COLORS[section] || "#888";
+              const sectionLoggedCount = sectionExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").length;
+              const isWarmUp = section === "WARM UP";
+              const isWarmUpComplete = isWarmUp && sectionExercises.length > 0 && sectionLoggedCount === sectionExercises.length;
+              const collapseKey = `${activeDay}||${section}`;
+              const isCollapsed = isWarmUp && (collapsedSections[collapseKey] ?? isWarmUpComplete);
+              return (
+                <div key={section} style={{ marginBottom: 32 }}>
+                  <button
+                    onClick={() => isWarmUp && setCollapsedSections(prev => ({ ...prev, [collapseKey]: !isCollapsed }))}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center",
+                      justifyContent: "space-between", gap: 12,
+                      marginBottom: isCollapsed ? 0 : 12,
+                      background: "none", border: "none", padding: 0,
+                      cursor: isWarmUp ? "pointer" : "default", textAlign: "left",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 8, height: 8, background: color, borderRadius: 99 }} />
+                      <span style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary }}>{section}</span>
+                    </div>
+                    <span style={{ fontFamily: UI.mono, fontSize: 10, letterSpacing: "0.08em", color: UI.disabled }}>
+                      {isWarmUp ? `${sectionLoggedCount}/${sectionExercises.length} ${isCollapsed ? "OPEN" : "CLOSE"}` : `${sectionExercises.length} ITEMS`}
+                    </span>
+                  </button>
+
+                  {!isCollapsed && sectionExercises.map(ex => {
+                    const wVal = getVal(activeDay, ex.name, "weight");
+                    const cVal = getVal(activeDay, ex.name, "comment");
+                    const rpeVal = getRPE(activeDay, ex.name);
+                    const exType = getType(activeDay, ex.name);
+                    const isBW = exType === "bw";
+                    const isExpanded = expandedCue === `${activeDay}||${ex.name}`;
+                    const prev = getPrevWeight(weights, activeDay, ex.name, activeWeek);
+                    const isLogged = wVal || isBW;
+
+                    return (
+                      <div key={ex.name} style={{
+                        background: isLogged ? UI.surface : "rgba(17,17,17,0.78)",
+                        border: `1px solid ${isLogged ? UI.borderVisible : UI.border}`,
+                        borderLeft: `2px solid ${isLogged ? color : UI.border}`,
+                        borderRadius: 6, marginBottom: 8,
+                      }}>
+                        <div style={{ padding: "13px 14px" }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+
+                            {/* Left: tappable for cue expand */}
+                            <div
+                              onClick={() => ex.cue && setExpandedCue(isExpanded ? null : `${activeDay}||${ex.name}`)}
+                              style={{ flex: 1, cursor: ex.cue ? "pointer" : "default" }}
+                            >
+                              <div style={{ fontSize: 15, fontWeight: 500, color: isLogged ? UI.display : UI.primary, lineHeight: 1.25, letterSpacing: "-0.01em" }}>{ex.name}</div>
+                              <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>{ex.sets}x{ex.reps}</span>
+                                <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>RPE {ex.rpe}</span>
+                                {prev && (
+                                  <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.warning, background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 3, padding: "3px 6px" }}>
+                                    {prev.week}: {prev.weight}{isBW ? "" : "kg"}
+                                  </span>
+                                )}
+                                {ex.cue && (
+                                  <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled }}>
+                                    {isExpanded ? "▲ CUE" : "▼ CUE"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Right: weight + RPE inputs + type toggle */}
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder={isBW ? "BW" : "kg"}
+                                value={isBW ? "" : wVal}
+                                disabled={isBW}
+                                onChange={e => handleWeight(activeDay, ex.name, e.target.value)}
+                                style={{
+                                  width: 72, background: isBW ? UI.surface : UI.black,
+                                  border: `1px solid ${wVal && !isBW ? UI.display : UI.borderVisible}`,
+                                  borderRadius: 4, padding: "7px 9px",
+                                  color: isBW ? UI.disabled : wVal ? UI.display : UI.disabled,
+                                  fontSize: 13, fontFamily: UI.mono,
+                                  fontWeight: 700, outline: "none", textAlign: "center",
+                                  letterSpacing: "0.02em"
+                                }}
+                              />
+                              <RPEInput
+                                value={rpeVal}
+                                onChange={(v) => handleRPE(activeDay, ex.name, v)}
+                                prescribed={ex.rpe}
+                              />
+                              <TypeToggle value={exType} onChange={(t) => handleType(activeDay, ex.name, t)} />
+                            </div>
+                          </div>
+
+                          {isExpanded && ex.cue && (
+                            <div style={{ marginTop: 12, padding: "9px 10px", background: UI.black, borderRadius: 4, borderLeft: `2px solid ${color}`, fontSize: 12, color: UI.secondary, lineHeight: 1.5 }}>
+                              {ex.cue}
+                            </div>
+                          )}
+
+                          <input
+                            type="text" placeholder="notes..."
+                            value={cVal}
+                            onChange={e => handleComment(activeDay, ex.name, e.target.value)}
+                            style={{
+                              width: "100%", marginTop: 10, background: UI.black,
+                              border: `1px solid ${UI.border}`, borderRadius: 4, padding: "7px 9px",
+                              color: UI.secondary, fontSize: 12, outline: "none", fontFamily: UI.sans
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // === APP SHELL ===
+
+    function App() {
+      const [cloudUser, setCloudUser] = useState(null);
+      const [authEmail, setAuthEmail] = useState(() => {
+        try { return window.SUPABASE_LOGIN_EMAIL || ""; } catch (_) { return ""; }
+      });
+      const [authStatus, setAuthStatus] = useState("idle");
+      const [selectedPhase, setSelectedPhase] = useState(() => {
+        try { return localStorage.getItem(LAST_PHASE_KEY) || null; } catch (_) { return null; }
+      });
+      const [phase1Completed, setPhase1Completed] = useState(() => {
+        try { return localStorage.getItem("phase1_completed") === "true"; } catch (_) { return false; }
+      });
+
+      // Resolve Supabase session on mount
+      useEffect(() => {
+        let alive = true;
+        const resolveSession = async () => {
+          if (!window.supabase?.getSession) return;
+          const { session } = await window.supabase.getSession();
+          const user = session?.user || null;
+          if (!alive) return;
+          setCloudUser(user);
+        };
+        resolveSession();
+        return () => { alive = false; };
+      }, []);
+
+      const openPhase = (phaseId) => {
+        setSelectedPhase(phaseId);
+        try { localStorage.setItem(LAST_PHASE_KEY, phaseId); } catch (_) {}
+      };
+
+      const handleBack = () => {
+        setSelectedPhase(null);
+        try { localStorage.removeItem(LAST_PHASE_KEY); } catch (_) {}
+      };
+
+      const sendLoginLink = async () => {
+        if (!authEmail.trim() || !window.supabase?.sendMagicLink) {
+          setAuthStatus("error");
+          setTimeout(() => setAuthStatus("idle"), 2000);
+          return;
+        }
+        setAuthStatus("sending");
+        const res = await window.supabase.sendMagicLink(authEmail.trim());
+        if (res?.error) {
+          setAuthStatus("error");
+          setTimeout(() => setAuthStatus("idle"), 3000);
+          return;
+        }
+        setAuthStatus("sent");
+        setTimeout(() => setAuthStatus("idle"), 4000);
+      };
+
+      if (selectedPhase === "phase1" && (cloudUser || phase1Completed)) {
+        return <Phase1Tracker cloudUser={cloudUser} onBack={handleBack} phase1Completed={phase1Completed} setPhase1Completed={setPhase1Completed} />;
+      }
+      if (selectedPhase === "phase2" && phase1Completed) {
+        return <Phase2Tracker cloudUser={cloudUser} onBack={handleBack} />;
+      }
+      return (
+        <PhaseLanding
+          onSelect={openPhase}
+          cloudUser={cloudUser}
+          authEmail={authEmail}
+          setAuthEmail={setAuthEmail}
+          authStatus={authStatus}
+          onLogin={sendLoginLink}
+          phase1Completed={phase1Completed}
+        />
       );
     }
 
