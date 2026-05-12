@@ -177,6 +177,82 @@ export async function migrateLocalToSupabaseIfNeeded(userId) {
   return res;
 }
 
+// === Phase 2 helpers (tracker_data_p2, adds rpe field) ===
+
+function localStateToRowsP2(weights, types, rpeLog, userId, metaByKey = {}) {
+  const rows = [];
+  const today = new Date().toISOString().split("T")[0];
+  for (const [dayKey, weekMap] of Object.entries(weights || {})) {
+    const [day, exercise] = dayKey.split("||");
+    if (!day || !exercise) continue;
+    for (const [week, data] of Object.entries(weekMap || {})) {
+      const meta = metaByKey[dayKey] || {};
+      const rpeVal = rpeLog?.[dayKey]?.[week];
+      rows.push({
+        user_id: userId,
+        date: today,
+        week, day,
+        section: meta.section ?? data?.section ?? "",
+        exercise,
+        sets: Number.isFinite(Number(meta.sets ?? data?.sets)) ? Number(meta.sets ?? data?.sets) : 0,
+        reps: String(meta.reps ?? data?.reps ?? ""),
+        weight: String(data?.weight ?? ""),
+        rpe: rpeVal ? parseFloat(rpeVal) : null,
+        type: String(types?.[dayKey] ?? data?.type ?? ""),
+        notes: String(data?.comment ?? data?.notes ?? ""),
+        updated_at: new Date().toISOString(),
+      });
+    }
+  }
+  return rows;
+}
+
+function rowsToP2State(rows) {
+  const weights = {};
+  const types = {};
+  const rpeLog = {};
+  for (const row of rows || []) {
+    if (!row?.day || !row?.exercise || !row?.week) continue;
+    const key = `${row.day}||${row.exercise}`;
+    if (!weights[key]) weights[key] = {};
+    weights[key][row.week] = {
+      weight: row.type === "bw" ? "" : String(row.weight ?? ""),
+      comment: String(row.notes ?? ""),
+    };
+    if (row.type) types[key] = row.type;
+    if (row.rpe != null) {
+      if (!rpeLog[key]) rpeLog[key] = {};
+      rpeLog[key][row.week] = String(row.rpe);
+    }
+  }
+  return { weights, types, rpeLog };
+}
+
+export async function fetchAllDataForUserP2(userId) {
+  if (!userId) return { data: [], error: new Error("Missing userId") };
+  const client = getClient();
+  const { data, error } = await client
+    .from("tracker_data_p2")
+    .select("date, week, day, section, exercise, sets, reps, weight, rpe, type, notes, updated_at")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: true });
+  return { data, error };
+}
+
+export async function hydrateP2TrackerState(userId) {
+  const { data, error } = await fetchAllDataForUserP2(userId);
+  if (error) return { weights: {}, types: {}, rpeLog: {}, error };
+  return { ...rowsToP2State(data), error: null };
+}
+
+export async function upsertP2TrackerState({ userId, weights, types, rpeLog, metaByKey }) {
+  if (!userId) return { data: null, error: new Error("Missing userId") };
+  const client = getClient();
+  const rows = localStateToRowsP2(weights, types, rpeLog, userId, metaByKey);
+  if (!rows.length) return { data: [], error: null };
+  return client.from("tracker_data_p2").upsert(rows, { onConflict: "user_id,day,exercise,week" });
+}
+
 export const api = {
   initClient,
   loginWithEmailPassword,
@@ -192,6 +268,9 @@ export const api = {
   localStorageStateToRows,
   rowsToTrackerState,
   migrateLocalToSupabaseIfNeeded,
+  fetchAllDataForUserP2,
+  hydrateP2TrackerState,
+  upsertP2TrackerState,
 };
 
 // expose a global for non-module consumers (like the current index.html script)
