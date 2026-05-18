@@ -54,6 +54,7 @@
 
     const DAYS = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5 (Optional)"];
     const WEEKS = ["W1", "W2", "W3", "W4", "W5 (Deload)"];
+    const WEEKS_P2 = ["W1", "W2", "W3", "W4", "W5 (Deload)", "W6", "W7", "W8 (Deload)"];
 
     const PROGRAM = {
       "Day 1": [
@@ -119,24 +120,63 @@
 
     // Phase 2 program — fill in exercises when ready
     const PROGRAM_P2 = {
-      "Day 1": [
-        { section: "WARM UP", name: "Warm-Up D1 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 warm-up exercises." },
-        { section: "SQUAT", name: "Main Lift D1 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 squat exercise." },
+      "Monday": [
+        { section: "WARM UP", name: "Ankle mobility (knee-to-wall)", sets: 1, reps: "1 min/side", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Tibialis raises", sets: 3, reps: "15", rpe: "—", cue: "Shin pump — tendon maintenance, never skip." },
+        { section: "WARM UP", name: "Copenhagen plank hold", sets: 2, reps: "20–30s/side", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "SL glute bridge", sets: 2, reps: "12/side", rpe: "—", cue: "Glute activation before loaded squat." },
+        { section: "SQUAT", name: "Nordic hamstring curl", sets: 3, reps: "5", rpe: "Quality", cue: "Weeks 6–8: do HERE before squats — fresh posterior chain. Week 9+: move post-squat once tolerance established. 4s eccentric. Catch yourself on the way down." },
+        { section: "SQUAT", name: "Back squat", sets: 4, reps: "5", rpe: "8.5", cue: "Explosive ascent. Tempo 2-0-X. Add 2.5–5kg when RPE drops below 8. Bar speed > load.", suggestedWeight: { w1: "150", w2: "155" } },
+        { section: "UNI", name: "Bulgarian split squat", sets: 4, reps: "8/leg", rpe: "7→8", cue: "RPE 7 Week 1 — new movement on post-surgery legs. Progress to RPE 8 from Week 7. Full depth. Monitor both Achilles 24h after first session.", suggestedWeight: { w1: "22.5", w2: "27.5" } },
+        { section: "CALF", name: "Leg press calf raise", sets: 4, reps: "12", rpe: "9", cue: "Explosive up, 3s down. Full stretch at bottom. +5kg every 2 weeks.", suggestedWeight: { w1: "110", w2: "115" } },
+        { section: "CALF", name: "Seated calf raise", sets: 4, reps: "12", rpe: "9", cue: "4 sets now. Soleus focus. Pause 1s at full stretch. +5kg every 2–3 weeks.", suggestedWeight: { w1: "100", w2: "105" } },
+        { section: "CORE", name: "Ab wheel rollout", sets: 3, reps: "12", rpe: "—", cue: "Glutes squeezed throughout. No back sag. Pause 1s at full extension." },
+        { section: "NECK", name: "Neck plank ISO", sets: 2, reps: "15s/side", rpe: "—", cue: "Non-negotiable 3×/week neck frequency. Side of head on floor. Max tension each side." },
       ],
-      "Day 2": [
-        { section: "WARM UP", name: "Warm-Up D2 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 warm-up exercises." },
-        { section: "PRESS", name: "Main Lift D2 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 press exercise." },
+      "Tuesday": [
+        { section: "WARM UP", name: "Band pull-aparts", sets: 2, reps: "20", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Scapular pull-ups", sets: 2, reps: "10", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "KB Halo", sets: 2, reps: "10", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Push-up to down dog", sets: 2, reps: "8", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Muscle snatch", sets: 2, reps: "5", rpe: "—", cue: "Explosive full-body primer before Push Press." },
+        { section: "PRESS", name: "Push press", sets: 5, reps: "4–5", rpe: "8", cue: "5 sets. Bar speed is the goal, not grinding. Leg drive launches the bar. Add 2.5kg when RPE drops below 7.5.", suggestedWeight: { w1: "92.5", w2: "95" } },
+        { section: "ROW", name: "Chest-supported row", sets: 4, reps: "10", rpe: "8–9", cue: "Replaces Pendlay — no lower back load. Full stretch at top. Squeeze 1s at contraction. No body English.", suggestedWeight: { w1: "55–60", w2: "60–65" } },
+        { section: "CHEST", name: "Incline DB bench", sets: 4, reps: "10", rpe: "8–9", cue: "W4 Phase 1 was RPE 7 — load can move. 4 sets now. Controlled eccentric. +2.5kg every 2 weeks.", suggestedWeight: { w1: "40", w2: "42.5" } },
+        { section: "NECK", name: "Neck flexion", sets: 3, reps: "12", rpe: "—", cue: "Stuck at 20kg all Phase 1 — do NOT jump to 32.5kg. Progression: +2.5kg every 2 weeks (22.5→25→27.5→30kg). Plate on forehead. Chin to chest. Slow eccentric.", suggestedWeight: { w1: "22.5", w2: "25" } },
+        { section: "ARMS", name: "EZ bar curl", sets: 3, reps: "12", rpe: "7–8", cue: "3s eccentric this phase. Strict. No swinging.", suggestedWeight: { w1: "40", w2: "42.5" } },
+        { section: "ARMS", name: "Skullcrushers", sets: 3, reps: "12", rpe: "8", cue: "Slow eccentric. Elbows in. Control to forehead. +2.5kg every 2–3 weeks.", suggestedWeight: { w1: "40", w2: "42.5" } },
+        { section: "ARMS", name: "DB lateral raise", sets: 3, reps: "15", rpe: "7–8", cue: "Already doing 20kg in Phase 1 — start here. Controlled descent. Add 2.5kg when RPE drops below 7.", suggestedWeight: { w1: "20", w2: "22.5" } },
       ],
-      "Day 3": [
-        { section: "WARM UP", name: "Warm-Up D3 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 warm-up exercises." },
-        { section: "HAMS", name: "Main Lift D3 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 hinge/hamstring exercise." },
+      "Thursday": [
+        { section: "WARM UP", name: "Hip 90/90", sets: 2, reps: "1 min", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "SL glute bridge", sets: 2, reps: "12/side", rpe: "—", cue: "Activate glutes before hinge work." },
+        { section: "WARM UP", name: "Lateral lunges", sets: 2, reps: "8/side", rpe: "—", cue: "Hip opener — also loads lateral ankle stability." },
+        { section: "WARM UP", name: "Copenhagen plank hold", sets: 2, reps: "20–30s/side", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Band Pallof hold", sets: 2, reps: "10s/side", rpe: "—", cue: "Anti-rotation gap fill. Stay tall, don't twist." },
+        { section: "WARM UP", name: "High hang pulls", sets: 3, reps: "3 (60–65kg)", rpe: "—", cue: "From hip crease. Explosive hip extension. No catch — zero Achilles load. Activates posterior chain before DL." },
+        { section: "PLYO", name: "Depth drop to jump", sets: 4, reps: "5", rpe: "Quality", cue: "Step off → absorb → jump immediately. Reactive. Box: 25–30cm. Do NOT progress height until landing is fully controlled for 2 consecutive sessions." },
+        { section: "HINGE", name: "Conventional barbell DL", sets: 4, reps: "4–5", rpe: "8.5", cue: "Switched from trap bar — NOT a 1:1 load swap. Higher lumbar moment arm. Start conservative at 140kg. Build 5kg/week. Bar stays close to shins.", suggestedWeight: { w1: "140", w2: "145" } },
+        { section: "UNI", name: "Single leg press", sets: 4, reps: "10", rpe: "8–9", cue: "4 sets. Quad-dominant — gives lower back a partial recovery window before RDL. +5kg every 2 weeks.", suggestedWeight: { w1: "100", w2: "105" } },
+        { section: "HAMS", name: "Romanian DL", sets: 2, reps: "10", rpe: "8", cue: "CAPPED at 2 sets Weeks 6–8 — conventional DL already loads lumbar heavily. Expand to 3 sets from Week 9 only if lower back recovery is confirmed. Full hamstring stretch. Slow descent.", suggestedWeight: { w1: "75", w2: "80" } },
+        { section: "CORE", name: "Landmine rotation", sets: 3, reps: "8/side", rpe: "Quality", cue: "Hip-driven rotation — fills transverse plane gap. Control the return. Light Week 1.", suggestedWeight: { w1: "10–15", w2: "15–20" } },
+        { section: "CORE", name: "Dead bug weighted", sets: 3, reps: "6/side", rpe: "Quality", cue: "Arms overhead, contralateral leg extends. Slow and controlled. Lower back stays flat.", suggestedWeight: { w1: "30", w2: "30" } },
+        { section: "CALF", name: "Tibialis raises", sets: 3, reps: "20", rpe: "—", cue: "Pump the shins. Essential for bilateral Achilles recovery. Never skip." },
+        { section: "NECK", name: "Neck plank ISO", sets: 2, reps: "15s/side", rpe: "—", cue: "3×/week neck frequency. Side of head on floor. Max neck tension." },
       ],
-      "Day 4": [
-        { section: "WARM UP", name: "Warm-Up D4 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 warm-up exercises." },
-        { section: "PRESS", name: "Main Lift D4 (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 horizontal press exercise." },
-      ],
-      "Day 5 (Optional)": [
-        { section: "CARRY", name: "Conditioning (P2 TBD)", sets: 0, reps: "—", rpe: "—", cue: "Replace with Phase 2 conditioning work." },
+      "Friday": [
+        { section: "WARM UP", name: "Face pulls", sets: 2, reps: "15", rpe: "—", cue: "Rear delt health — consistent with all phases." },
+        { section: "WARM UP", name: "Scap push-ups", sets: 2, reps: "12", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Dead hang", sets: 2, reps: "45s", rpe: "—", cue: "Decompress spine after lower days." },
+        { section: "WARM UP", name: "Thread the needle", sets: 2, reps: "5/side", rpe: "—", cue: "Thoracic rotation." },
+        { section: "PRESS", name: "Close grip bench", sets: 4, reps: "5–6", rpe: "8.5", cue: "Stagnant at 100kg all Phase 1 despite fast bar speed — overdue jump. 1s pause. Elbows tucked. +2.5kg when RPE drops below 8.", suggestedWeight: { w1: "102.5", w2: "105" } },
+        { section: "PULL", name: "Weighted pull-up", sets: 4, reps: "5–6", rpe: "8–9", cue: "Replaces lat pulldown. Pulling strength is high. Start +10kg, not BW. Full ROM. Slow eccentric.", suggestedWeight: { w1: "10", w2: "12.5–15" } },
+        { section: "ROW", name: "Bear stance row", sets: 4, reps: "10", rpe: "8–9", cue: "35kg at RPE 6 all Phase 1 — massively undertrained. Jump immediately to 42.5kg. Isolate upper back. Squeeze hard at contraction.", suggestedWeight: { w1: "42.5", w2: "45" } },
+        { section: "NECK", name: "Neck extension", sets: 3, reps: "12", rpe: "—", cue: "Plate on back of head. Look up. Slow eccentric. +2.5kg every 3 weeks.", suggestedWeight: { w1: "17.5", w2: "20" } },
+        { section: "ARMS", name: "Tricep pushdown", sets: 3, reps: "14–16", rpe: "8", cue: "Rope attachment. Spread at bottom. Full extension. W4 Phase 1 was 45kg RPE 8.", suggestedWeight: { w1: "47.5", w2: "50" } },
+        { section: "ARMS", name: "Hammer curls", sets: 3, reps: "12", rpe: "8", cue: "Brachialis focus. No swing. Keep W1 load, add 2.5kg W2.", suggestedWeight: { w1: "25", w2: "27.5" } },
+        { section: "ARMS", name: "DB shrug", sets: 3, reps: "15", rpe: "8", cue: "Hold top 1s. Trap mass for rugby contact. +5kg every 3 weeks.", suggestedWeight: { w1: "40", w2: "42.5" } },
+        { section: "CARRY", name: "Farmer's carry (Wks 6–9)", sets: 3, reps: "20–30m", rpe: "Quality", cue: "WEEKS 6–9 ONLY — transitions to Suitcase carry at Week 10. Shoulders packed and depressed, chest tall, short deliberate steps. +5kg every 2–3 weeks.", suggestedWeight: { w1: "40–45", w2: "45" } },
+        { section: "CARRY", name: "Suitcase carry (Wks 10–13)", sets: 3, reps: "20m/side", rpe: "Quality", cue: "WEEKS 10–13 — replaces Farmer's carry. Single heavy DB. Do NOT lean away from the load — resisting the lateral pull is the whole point. Stand tall.", suggestedWeight: { w1: "45–50", w2: "50" } },
       ],
     };
 
@@ -378,7 +418,7 @@
       const [activeWeek, setActiveWeek] = useState("W1");
       const [weights, setWeights] = useState({});
       const [types, setTypes] = useState({});
-      const [expandedCue, setExpandedCue] = useState(null);
+      const [collapsedCues, setCollapsedCues] = useState(new Set());
       const [collapsedSections, setCollapsedSections] = useState({});
       const [saveStatus, setSaveStatus] = useState("");
       const [syncStatus, setSyncStatus] = useState("idle");
@@ -736,7 +776,8 @@
                     const cVal = getVal(activeDay, ex.name, "comment");
                     const exType = getType(activeDay, ex.name);
                     const isBW = exType === "bw";
-                    const isExpanded = expandedCue === `${activeDay}||${ex.name}`;
+                    const cueKey = `${activeDay}||${ex.name}`;
+                    const isExpanded = ex.cue && !collapsedCues.has(cueKey);
                     const prev = getPrevWeight(weights, activeDay, ex.name, activeWeek);
                     const isLogged = wVal || isBW;
 
@@ -750,9 +791,9 @@
                         <div style={{ padding: "13px 14px" }}>
                           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
 
-                            {/* Fix 1c: left column is tappable for cue expand */}
+                            {/* Left column is tappable for cue expand */}
                             <div
-                              onClick={() => ex.cue && setExpandedCue(isExpanded ? null : `${activeDay}||${ex.name}`)}
+                              onClick={() => { if (!ex.cue) return; setCollapsedCues(prev => { const s = new Set(prev); s.has(cueKey) ? s.delete(cueKey) : s.add(cueKey); return s; }); }}
                               style={{ flex: 1, cursor: ex.cue ? "pointer" : "default" }}
                             >
                               <div style={{ fontSize: 15, fontWeight: 500, color: isLogged ? UI.display : UI.primary, lineHeight: 1.25, letterSpacing: "-0.01em" }}>{ex.name}</div>
@@ -826,12 +867,12 @@
     // === PHASE 2 TRACKER ===
 
     function Phase2Tracker({ cloudUser, onBack }) {
-      const [activeDay, setActiveDay] = useState("Day 1");
+      const [activeDay, setActiveDay] = useState("Monday");
       const [activeWeek, setActiveWeek] = useState("W1");
       const [weights, setWeights] = useState({});
       const [types, setTypes] = useState({});
       const [rpeLog, setRpeLog] = useState({});
-      const [expandedCue, setExpandedCue] = useState(null);
+      const [collapsedCues, setCollapsedCues] = useState(new Set());
       const [collapsedSections, setCollapsedSections] = useState({});
       const [saveStatus, setSaveStatus] = useState("");
       const [syncStatus, setSyncStatus] = useState("idle");
@@ -841,10 +882,10 @@
       });
 
       const isPhaseComplete = useCallback(() => {
-        const weekKeys = ["W1", "W2", "W3", "W4"];
+        const weekKeys = ["W1", "W2", "W3", "W4", "W6", "W7"];
         let total = 0, logged = 0;
         for (const day of Object.keys(PROGRAM_P2)) {
-          if (day === "Day 5 (Optional)") continue;
+          if (day === "Saturday (Optional)") continue;
           const exercises = PROGRAM_P2[day].filter(e => e.section !== "WARM UP");
           for (const ex of exercises) {
             for (const wk of weekKeys) {
@@ -1115,7 +1156,7 @@
 
           {/* Week Tabs */}
           <div style={{ background: UI.black, borderBottom: `1px solid ${UI.border}`, padding: "0 16px", display: "flex", gap: 0, overflowX: "auto" }}>
-            {WEEKS.map(w => (
+            {WEEKS_P2.map(w => (
               <button key={w} onClick={() => setActiveWeek(w)} style={{
                 background: "none", border: "none", cursor: "pointer",
                 padding: "13px 14px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
@@ -1124,14 +1165,14 @@
                 borderBottom: activeWeek === w ? `1px solid ${UI.accent}` : "1px solid transparent",
                 whiteSpace: "nowrap"
               }}>
-                {w === "W5 (Deload)" ? "W5 DELOAD" : w}
+                {w.includes("Deload") ? w.replace(" (Deload)", " DELOAD") : w}
               </button>
             ))}
           </div>
 
           {/* Day Selector */}
           <div style={{ padding: "16px", display: "flex", gap: 8, overflowX: "auto" }}>
-            {DAYS.map(d => {
+            {Object.keys(PROGRAM_P2).map(d => {
               const dayEx = PROGRAM_P2[d] || [];
               const logged = dayEx.filter(e => getVal(d, e.name, "weight") || getType(d, e.name) === "bw").length;
               return (
@@ -1143,7 +1184,7 @@
                   fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
                   whiteSpace: "nowrap", minWidth: 70, transition: UI.ease
                 }}>
-                  <div>{d.split(" ").slice(0, 2).join(" ").toUpperCase()}</div>
+                  <div>{d.toUpperCase()}</div>
                   <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.62, marginTop: 4 }}>{logged}/{dayEx.length}</div>
                 </button>
               );
@@ -1151,7 +1192,7 @@
           </div>
 
           {/* Deload Banner */}
-          {activeWeek === "W5 (Deload)" && (
+          {activeWeek.includes("Deload") && (
             <div style={{ margin: "0 16px 24px", padding: "12px 14px", background: UI.black, border: `1px solid ${UI.warning}`, borderRadius: 4, fontFamily: UI.mono, fontSize: 11, color: UI.warning, lineHeight: 1.5, letterSpacing: "0.03em" }}>
               [DELOAD] CUT LOADS 40-50%. 2 SETS PER EXERCISE. EASY IS THE POINT.
             </div>
@@ -1193,9 +1234,13 @@
                     const rpeVal = getRPE(activeDay, ex.name);
                     const exType = getType(activeDay, ex.name);
                     const isBW = exType === "bw";
-                    const isExpanded = expandedCue === `${activeDay}||${ex.name}`;
+                    const cueKey = `${activeDay}||${ex.name}`;
+                    const isExpanded = ex.cue && !collapsedCues.has(cueKey);
                     const prev = getPrevWeight(weights, activeDay, ex.name, activeWeek);
                     const isLogged = wVal || isBW;
+                    const suggestedKg = ex.suggestedWeight && !isBW && !wVal && (activeWeek === "W1" || activeWeek === "W2")
+                      ? (activeWeek === "W1" ? ex.suggestedWeight.w1 : ex.suggestedWeight.w2)
+                      : null;
 
                     return (
                       <div key={ex.name} style={{
@@ -1209,7 +1254,7 @@
 
                             {/* Left: tappable for cue expand */}
                             <div
-                              onClick={() => ex.cue && setExpandedCue(isExpanded ? null : `${activeDay}||${ex.name}`)}
+                              onClick={() => { if (!ex.cue) return; setCollapsedCues(prev => { const s = new Set(prev); s.has(cueKey) ? s.delete(cueKey) : s.add(cueKey); return s; }); }}
                               style={{ flex: 1, cursor: ex.cue ? "pointer" : "default" }}
                             >
                               <div style={{ fontSize: 15, fontWeight: 500, color: isLogged ? UI.display : UI.primary, lineHeight: 1.25, letterSpacing: "-0.01em" }}>{ex.name}</div>
@@ -1221,6 +1266,17 @@
                                     {prev.week}: {prev.weight}{isBW ? "" : "kg"}
                                   </span>
                                 )}
+                                {suggestedKg && (() => {
+                                  const isRange = suggestedKg.includes("–");
+                                  return (
+                                    <span
+                                      onClick={isRange ? (e) => e.stopPropagation() : (e) => { e.stopPropagation(); handleWeight(activeDay, ex.name, suggestedKg); }}
+                                      style={{ fontFamily: UI.mono, fontSize: 10, color: UI.warning, background: "rgba(212,168,67,0.08)", border: `1px dashed rgba(212,168,67,0.4)`, borderRadius: 3, padding: "3px 6px", cursor: isRange ? "default" : "pointer" }}
+                                    >
+                                      ↑ {suggestedKg}kg
+                                    </span>
+                                  );
+                                })()}
                                 {ex.cue && (
                                   <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled }}>
                                     {isExpanded ? "▲ CUE" : "▼ CUE"}
@@ -1314,6 +1370,13 @@
       };
 
       const sendLoginLink = async () => {
+        const isLocal = ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+        if (isLocal && authEmail.trim().toLowerCase() === "dev") {
+          setPhase1Completed(true);
+          try { localStorage.setItem("phase1_completed", "true"); } catch (_) {}
+          setSelectedPhase("phase2");
+          return;
+        }
         if (!authEmail.trim() || !window.supabase?.sendMagicLink) {
           setAuthStatus("error");
           setTimeout(() => setAuthStatus("idle"), 2000);
