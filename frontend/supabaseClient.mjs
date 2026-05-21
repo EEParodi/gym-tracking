@@ -172,7 +172,12 @@ export async function migrateLocalToSupabaseIfNeeded(userId) {
   if (flag) {
     return { migrated: 0, reason: "already-done" };
   }
-  const res = await migrateLocalToSupabase(userId);
+  let res;
+  try {
+    res = await migrateLocalToSupabase(userId);
+  } catch (e) {
+    return { migrated: 0, error: e };
+  }
   if (res?.migrated > 0 && !res?.error) localStorage.setItem("phase1-migration-done", "true");
   return res;
 }

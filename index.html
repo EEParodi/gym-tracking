@@ -290,7 +290,12 @@
           inputMode="decimal"
           placeholder="RPE"
           value={value}
-          onChange={e => onChange(e.target.value)}
+          onChange={e => {
+            const raw = e.target.value;
+            if (raw === "" || raw === ".") { onChange(raw); return; }
+            const n = parseFloat(raw);
+            if (!isNaN(n) && n >= 0 && n <= 10) onChange(raw);
+          }}
           style={{
             width: 52, background: UI.black,
             border: `1px solid ${value ? UI.display : UI.borderVisible}`,
@@ -368,6 +373,7 @@
                 <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.5, color: UI.secondary }}>Use a magic link to connect this browser to Supabase.</div>
                 <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
                   <input
+                    type="email"
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
                     placeholder="EMAIL"
@@ -426,7 +432,7 @@
       const [importStatus, setImportStatus] = useState("idle");
 
       const isPhaseComplete = useCallback(() => {
-        const weekKeys = ["W1", "W2", "W3", "W4"];
+        const weekKeys = WEEKS.filter(w => !w.includes("Deload"));
         let total = 0, logged = 0;
         for (const day of Object.keys(PROGRAM)) {
           if (day === "Day 5 (Optional)") continue;
@@ -492,14 +498,17 @@
           localStorage.setItem(LAST_PHASE_KEY, "phase1");
           setSaveStatus("saved");
           setTimeout(() => setSaveStatus(""), 1200);
-        } catch (_) {}
+        } catch (_) {
+          setSaveStatus("error");
+          setTimeout(() => setSaveStatus(""), 2500);
+        }
       }, []);
 
       const saveTypes = useCallback((newTypes) => {
         try {
           localStorage.setItem(TYPES_KEY, JSON.stringify(newTypes));
           localStorage.setItem(LAST_PHASE_KEY, "phase1");
-        } catch (_) {}
+        } catch (_) { console.warn("Failed to save types to localStorage"); }
       }, []);
 
       const handleWeight = (day, exercise, value) => {
@@ -534,7 +543,12 @@
       const getType = (day, exercise) => types[`${day}||${exercise}`] || null;
 
       const syncToCloud = async () => {
-        if (!cloudUser?.id || !window.supabase?.upsertTrackerStateToSupabase) {
+        if (!cloudUser?.id) {
+          setSyncStatus("no-auth");
+          setTimeout(() => setSyncStatus("idle"), 2000);
+          return;
+        }
+        if (!window.supabase?.upsertTrackerStateToSupabase) {
           setSyncStatus("error");
           setTimeout(() => setSyncStatus("idle"), 2000);
           return;
@@ -593,6 +607,7 @@
         syncing: { bg: UI.black, border: UI.borderVisible, color: UI.disabled, label: "SYNCING" },
         ok:      { bg: UI.black, border: UI.success, color: UI.success, label: "SAVED CLOUD" },
         empty:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "NO DATA" },
+        "no-auth": { bg: "rgba(215,150,0,0.15)", border: UI.warning, color: UI.warning, label: "NOT LOGGED IN" },
         error:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "SYNC ERROR" },
       }[syncStatus];
 
@@ -619,6 +634,7 @@
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: "column" }}>
                 {saveStatus === "saved" && <div style={{ fontSize: 11, color: UI.success, fontFamily: UI.mono, letterSpacing: "0.08em" }}>[SAVED]</div>}
+                {saveStatus === "error" && <div style={{ fontSize: 11, color: UI.accent, fontFamily: UI.mono, letterSpacing: "0.08em" }}>[SAVE FAILED]</div>}
                 <div style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, letterSpacing: "0.08em" }}>
                   {cloudUser ? `CLOUD / ${cloudUser.email || cloudUser.id}` : "CLOUD / OFFLINE"}
                 </div>
@@ -669,6 +685,7 @@
                 )}
                 {phase1Completed && (
                   <button onClick={() => {
+                    const escapeCsv = s => `"${String(s).replace(/"/g, '""')}"`;
                     const rows = [["Exercise", "Section", "Week", "Day", "Weight", "Type", "Comment"].join(",")];
                     for (const day of Object.keys(PROGRAM)) {
                       for (const ex of PROGRAM[day]) {
@@ -676,7 +693,7 @@
                           const key = `${day}||${ex.name}`;
                           const w = weights[key]?.[wk];
                           if (w?.weight || types[key] === "bw") {
-                            rows.push([`"${ex.name}"`, `"${ex.section}"`, `"${wk}"`, `"${day}"`, w?.weight || "", `"${types[key] || ""}"`, `"${(w?.comment || "").replace(/"/g, '""')}"`].join(","));
+                            rows.push([escapeCsv(ex.name), escapeCsv(ex.section), escapeCsv(wk), escapeCsv(day), w?.weight || "", escapeCsv(types[key] || ""), escapeCsv(w?.comment || "")].join(","));
                           }
                         }
                       }
@@ -715,8 +732,8 @@
           {/* Day Selector */}
           <div style={{ padding: "16px", display: "flex", gap: 8, overflowX: "auto" }}>
             {DAYS.map(d => {
-              const dayEx = PROGRAM[d] || [];
-              const logged = dayEx.filter(e => getVal(d, e.name, "weight") || getType(d, e.name) === "bw").length;
+              const workingDayEx = (PROGRAM[d] || []).filter(e => e.section !== "WARM UP");
+              const logged = workingDayEx.filter(e => getVal(d, e.name, "weight") || getType(d, e.name) === "bw").length;
               return (
                 <button key={d} onClick={() => setActiveDay(d)} style={{
                   background: activeDay === d ? UI.display : UI.black,
@@ -727,7 +744,7 @@
                   whiteSpace: "nowrap", minWidth: 70, transition: UI.ease
                 }}>
                   <div>{d.split(" ").slice(0, 2).join(" ").toUpperCase()}</div>
-                  <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.62, marginTop: 4 }}>{logged}/{dayEx.length}</div>
+                  <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.62, marginTop: 4 }}>{logged}/{workingDayEx.length}</div>
                 </button>
               );
             })}
@@ -801,9 +818,9 @@
                               <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
                                 <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>{ex.sets}x{ex.reps}</span>
                                 <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>RPE {ex.rpe}</span>
-                                {prev && (
+                                {prev && !isBW && (
                                   <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.warning, background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 3, padding: "3px 6px" }}>
-                                    {prev.week}: {prev.weight}{isBW ? "" : "kg"}
+                                    {prev.week}: {prev.weight}kg
                                   </span>
                                 )}
                                 {ex.cue && (
@@ -883,7 +900,7 @@
       });
 
       const isPhaseComplete = useCallback(() => {
-        const weekKeys = ["W1", "W2", "W3", "W4", "W6", "W7"];
+        const weekKeys = WEEKS_P2.filter(w => !w.includes("Deload"));
         let total = 0, logged = 0;
         for (const day of Object.keys(PROGRAM_P2)) {
           if (day === "Saturday (Optional)") continue;
@@ -940,14 +957,17 @@
           localStorage.setItem(LAST_PHASE_KEY, "phase2");
           setSaveStatus("saved");
           setTimeout(() => setSaveStatus(""), 1200);
-        } catch (_) {}
+        } catch (_) {
+          setSaveStatus("error");
+          setTimeout(() => setSaveStatus(""), 2500);
+        }
       }, []);
 
       const saveTypes = useCallback((newTypes) => {
         try {
           localStorage.setItem(TYPES_KEY_P2, JSON.stringify(newTypes));
           localStorage.setItem(LAST_PHASE_KEY, "phase2");
-        } catch (_) {}
+        } catch (_) { console.warn("Failed to save types to localStorage"); }
       }, []);
 
       const handleWeight = (day, exercise, value) => {
@@ -990,7 +1010,12 @@
       const getRPE = (day, exercise) => rpeLog[`${day}||${exercise}`]?.[activeWeek] || "";
 
       const syncToCloud = async () => {
-        if (!cloudUser?.id || !window.supabase?.upsertP2TrackerState) {
+        if (!cloudUser?.id) {
+          setSyncStatus("no-auth");
+          setTimeout(() => setSyncStatus("idle"), 2000);
+          return;
+        }
+        if (!window.supabase?.upsertP2TrackerState) {
           setSyncStatus("error");
           setTimeout(() => setSyncStatus("idle"), 2000);
           return;
@@ -1051,6 +1076,7 @@
         syncing: { bg: UI.black, border: UI.borderVisible, color: UI.disabled, label: "SYNCING" },
         ok:      { bg: UI.black, border: UI.success, color: UI.success, label: "SAVED CLOUD" },
         empty:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "NO DATA" },
+        "no-auth": { bg: "rgba(215,150,0,0.15)", border: UI.warning, color: UI.warning, label: "NOT LOGGED IN" },
         error:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "SYNC ERROR" },
       }[syncStatus];
 
@@ -1077,6 +1103,7 @@
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: "column" }}>
                 {saveStatus === "saved" && <div style={{ fontSize: 11, color: UI.success, fontFamily: UI.mono, letterSpacing: "0.08em" }}>[SAVED]</div>}
+                {saveStatus === "error" && <div style={{ fontSize: 11, color: UI.accent, fontFamily: UI.mono, letterSpacing: "0.08em" }}>[SAVE FAILED]</div>}
                 <div style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, letterSpacing: "0.08em" }}>
                   {cloudUser ? `CLOUD / ${cloudUser.email || cloudUser.id}` : "CLOUD / OFFLINE"}
                 </div>
@@ -1127,15 +1154,16 @@
                 )}
                 {phaseCompleted && (
                   <button onClick={() => {
+                    const escapeCsv = s => `"${String(s).replace(/"/g, '""')}"`;
                     const rows = [["Exercise", "Section", "Week", "Day", "Weight", "Type", "RPE", "Comment"].join(",")];
                     for (const day of Object.keys(PROGRAM_P2)) {
                       for (const ex of PROGRAM_P2[day]) {
-                        for (const wk of WEEKS) {
+                        for (const wk of WEEKS_P2) {
                           const key = `${day}||${ex.name}`;
                           const w = weights[key]?.[wk];
                           const rpe = rpeLog[key]?.[wk] || "";
                           if (w?.weight || types[key] === "bw") {
-                            rows.push([`"${ex.name}"`, `"${ex.section}"`, `"${wk}"`, `"${day}"`, w?.weight || "", `"${types[key] || ""}"`, rpe, `"${(w?.comment || "").replace(/"/g, '""')}"`].join(","));
+                            rows.push([escapeCsv(ex.name), escapeCsv(ex.section), escapeCsv(wk), escapeCsv(day), w?.weight || "", escapeCsv(types[key] || ""), rpe, escapeCsv(w?.comment || "")].join(","));
                           }
                         }
                       }
@@ -1174,8 +1202,8 @@
           {/* Day Selector */}
           <div style={{ padding: "16px", display: "flex", gap: 8, overflowX: "auto" }}>
             {Object.keys(PROGRAM_P2).map(d => {
-              const dayEx = PROGRAM_P2[d] || [];
-              const logged = dayEx.filter(e => getVal(d, e.name, "weight") || getType(d, e.name) === "bw").length;
+              const workingDayEx = (PROGRAM_P2[d] || []).filter(e => e.section !== "WARM UP");
+              const logged = workingDayEx.filter(e => getVal(d, e.name, "weight") || getType(d, e.name) === "bw").length;
               return (
                 <button key={d} onClick={() => setActiveDay(d)} style={{
                   background: activeDay === d ? UI.display : UI.black,
@@ -1186,7 +1214,7 @@
                   whiteSpace: "nowrap", minWidth: 70, transition: UI.ease
                 }}>
                   <div>{d.toUpperCase()}</div>
-                  <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.62, marginTop: 4 }}>{logged}/{dayEx.length}</div>
+                  <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.62, marginTop: 4 }}>{logged}/{workingDayEx.length}</div>
                 </button>
               );
             })}
@@ -1262,9 +1290,9 @@
                               <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
                                 <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>{ex.sets}x{ex.reps}</span>
                                 <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>RPE {ex.rpe}</span>
-                                {prev && (
+                                {prev && !isBW && (
                                   <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.warning, background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 3, padding: "3px 6px" }}>
-                                    {prev.week}: {prev.weight}{isBW ? "" : "kg"}
+                                    {prev.week}: {prev.weight}kg
                                   </span>
                                 )}
                                 {suggestedKg && (() => {
@@ -1286,30 +1314,32 @@
                               </div>
                             </div>
 
-                            {/* Right: weight + RPE inputs + type toggle — single row */}
-                            <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 6 }}>
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                placeholder={isBW ? "BW" : "kg"}
-                                value={isBW ? "" : wVal}
-                                disabled={isBW}
-                                onChange={e => handleWeight(activeDay, ex.name, e.target.value)}
-                                style={{
-                                  width: 72, background: isBW ? UI.surface : UI.black,
-                                  border: `1px solid ${wVal && !isBW ? UI.display : UI.borderVisible}`,
-                                  borderRadius: 4, padding: "7px 9px",
-                                  color: isBW ? UI.disabled : wVal ? UI.display : UI.disabled,
-                                  fontSize: 13, fontFamily: UI.mono,
-                                  fontWeight: 700, outline: "none", textAlign: "center",
-                                  letterSpacing: "0.02em"
-                                }}
-                              />
-                              <RPEInput
-                                value={rpeVal}
-                                onChange={(v) => handleRPE(activeDay, ex.name, v)}
-                                prescribed={ex.rpe}
-                              />
+                            {/* Right: inputs row on top, TypeToggle below */}
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder={isBW ? "BW" : "kg"}
+                                  value={isBW ? "" : wVal}
+                                  disabled={isBW}
+                                  onChange={e => handleWeight(activeDay, ex.name, e.target.value)}
+                                  style={{
+                                    width: 66, background: isBW ? UI.surface : UI.black,
+                                    border: `1px solid ${wVal && !isBW ? UI.display : UI.borderVisible}`,
+                                    borderRadius: 4, padding: "7px 9px",
+                                    color: isBW ? UI.disabled : wVal ? UI.display : UI.disabled,
+                                    fontSize: 13, fontFamily: UI.mono,
+                                    fontWeight: 700, outline: "none", textAlign: "center",
+                                    letterSpacing: "0.02em"
+                                  }}
+                                />
+                                <RPEInput
+                                  value={rpeVal}
+                                  onChange={(v) => handleRPE(activeDay, ex.name, v)}
+                                  prescribed={ex.rpe}
+                                />
+                              </div>
                               <TypeToggle value={exType} onChange={(t) => handleType(activeDay, ex.name, t)} />
                             </div>
                           </div>
@@ -1378,7 +1408,8 @@
           setSelectedPhase("phase2");
           return;
         }
-        if (!authEmail.trim() || !window.supabase?.sendMagicLink) {
+        const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authEmail.trim());
+        if (!authEmail.trim() || !looksLikeEmail || !window.supabase?.sendMagicLink) {
           setAuthStatus("error");
           setTimeout(() => setAuthStatus("idle"), 2000);
           return;
