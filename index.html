@@ -247,6 +247,16 @@
       return null;
     }
 
+    function getPrevRPE(rpeLog, day, exercise, currentWeek) {
+      const weekIdx = WEEKS.indexOf(currentWeek);
+      if (weekIdx <= 0) return null;
+      for (let i = weekIdx - 1; i >= 0; i--) {
+        const r = rpeLog[`${day}||${exercise}`]?.[WEEKS[i]];
+        if (r !== undefined && r !== "") return { rpe: r, week: WEEKS[i] };
+      }
+      return null;
+    }
+
     const TYPE_OPTIONS = [
       { id: "bb",  label: "BB",  title: "Barbell" },
       { id: "db",  label: "DB",  title: "Dumbbell" },
@@ -767,7 +777,7 @@
               const isWarmUpComplete = isWarmUp && sectionExercises.length > 0 && sectionLoggedCount === sectionExercises.length;
               // Fix 1b: key collapse state per day+section so days don't share collapsed state
               const collapseKey = `${activeDay}||${section}`;
-              const isCollapsed = isWarmUp && (collapsedSections[collapseKey] ?? isWarmUpComplete);
+              const isCollapsed = isWarmUp && (collapsedSections[collapseKey] ?? false);
               return (
                 <div key={section} style={{ marginBottom: 32 }}>
                   <button
@@ -1236,7 +1246,7 @@
               const isWarmUp = section === "WARM UP";
               const isWarmUpComplete = isWarmUp && sectionExercises.length > 0 && sectionLoggedCount === sectionExercises.length;
               const collapseKey = `${activeDay}||${section}`;
-              const isCollapsed = isWarmUp && (collapsedSections[collapseKey] ?? isWarmUpComplete);
+              const isCollapsed = isWarmUp && (collapsedSections[collapseKey] ?? false);
               return (
                 <div key={section} style={{ marginBottom: 32 }}>
                   <button
@@ -1266,10 +1276,19 @@
                     const cueKey = `${activeDay}||${ex.name}`;
                     const isExpanded = ex.cue && !collapsedCues.has(cueKey);
                     const prev = getPrevWeight(weights, activeDay, ex.name, activeWeek);
+                    const prevRpe = getPrevRPE(rpeLog, activeDay, ex.name, activeWeek);
                     const isLogged = wVal || isBW;
-                    const suggestedKg = ex.suggestedWeight && !isBW && !wVal && (activeWeek === "W1" || activeWeek === "W2")
+                    const staticSuggestedKg = ex.suggestedWeight && !isBW && !wVal && (activeWeek === "W1" || activeWeek === "W2")
                       ? (activeWeek === "W1" ? ex.suggestedWeight.w1 : ex.suggestedWeight.w2)
                       : null;
+                    const rpeBasedSuggestion = (() => {
+                      if (isBW || wVal) return null;
+                      if (!prevRpe || prevRpe.rpe === "" || Number(prevRpe.rpe) > 7) return null;
+                      if (!prev) return null;
+                      const kg = (parseFloat(prev.weight) + 2.5).toFixed(1).replace(/\.0$/, "");
+                      return kg;
+                    })();
+                    const suggestedKg = rpeBasedSuggestion || staticSuggestedKg;
 
                     return (
                       <div key={ex.name} style={{
@@ -1295,14 +1314,24 @@
                                     {prev.week}: {prev.weight}kg
                                   </span>
                                 )}
+                                {prevRpe && !isBW && (() => {
+                                  const r = Number(prevRpe.rpe);
+                                  const rpeColor = r <= 7 ? UI.success : r <= 8.5 ? UI.warning : UI.accent;
+                                  return (
+                                    <span style={{ fontFamily: UI.mono, fontSize: 10, color: rpeColor, background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 3, padding: "3px 6px" }}>
+                                      {prevRpe.week} RPE {prevRpe.rpe}
+                                    </span>
+                                  );
+                                })()}
                                 {suggestedKg && (() => {
                                   const isRange = suggestedKg.includes("–");
+                                  const isDynamic = !!rpeBasedSuggestion;
                                   return (
                                     <span
                                       onClick={isRange ? (e) => e.stopPropagation() : (e) => { e.stopPropagation(); handleWeight(activeDay, ex.name, suggestedKg); }}
-                                      style={{ fontFamily: UI.mono, fontSize: 10, color: UI.warning, background: "rgba(212,168,67,0.08)", border: `1px dashed rgba(212,168,67,0.4)`, borderRadius: 3, padding: "3px 6px", cursor: isRange ? "default" : "pointer" }}
+                                      style={{ fontFamily: UI.mono, fontSize: 10, color: isDynamic ? UI.success : UI.warning, background: isDynamic ? "rgba(74,158,92,0.08)" : "rgba(212,168,67,0.08)", border: `1px dashed ${isDynamic ? "rgba(74,158,92,0.4)" : "rgba(212,168,67,0.4)"}`, borderRadius: 3, padding: "3px 6px", cursor: isRange ? "default" : "pointer" }}
                                     >
-                                      ↑ {suggestedKg}kg
+                                      ↑ {suggestedKg}kg{isDynamic ? " (RPE)" : ""}
                                     </span>
                                   );
                                 })()}
