@@ -1453,11 +1453,10 @@
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <div style={{ flex: 1, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 6, padding: "12px 14px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
+                  <div style={{ marginBottom: 6 }}>
                     <span style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em" }}>VOLUME</span>
-                    <span onClick={() => setVolumeTooltip(v => !v)} style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, cursor: "pointer", lineHeight: 1 }}>ℹ</span>
                   </div>
-                  {volumeTooltip && <div style={{ fontFamily: UI.mono, fontSize: 8, color: UI.secondary, marginBottom: 5, letterSpacing: "0.04em" }}>sets × reps × kg</div>}
+                  <div style={{ fontFamily: UI.mono, fontSize: 8, color: UI.secondary, marginBottom: 5, letterSpacing: "0.04em" }}>sets × reps × kg</div>
                   <div style={{ fontFamily: UI.mono, fontSize: 18, fontWeight: 700, color: UI.primary }}>{sessionVolume > 0 ? `${Math.round(sessionVolume).toLocaleString()}` : "—"}</div>
                   {sessionVolume > 0 && <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>kg total</div>}
                 </div>
@@ -1472,9 +1471,9 @@
                   <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>logged</div>
                 </div>
                 <div style={{ flex: 1, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 6, padding: "12px 14px" }}>
-                  <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em", marginBottom: 6 }}>SETS</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em", marginBottom: 6 }}>WORKING SETS</div>
                   <div style={{ fontFamily: UI.mono, fontSize: 18, fontWeight: 700, color: UI.primary }}>{totalSets}</div>
-                  <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>working</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>done</div>
                 </div>
               </div>
             </div>
