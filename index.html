@@ -1311,15 +1311,6 @@
                     const suggestedKg = rpeBasedSuggestion || staticSuggestedKg;
                     const prevWeekWeights = WEEKS_P2.slice(0, WEEKS_P2.indexOf(activeWeek)).map(w => weights[`${activeDay}||${ex.name}`]?.[w]?.weight).filter(Boolean).map(parseFloat);
                     const isPR = wVal && !isBW && prevWeekWeights.length > 0 && parseFloat(wVal) > Math.max(...prevWeekWeights);
-                    const sparkPoints = (() => {
-                      if (isBW) return [];
-                      const pts = WEEKS_P2.map((w, i) => {
-                        const v = weights[`${activeDay}||${ex.name}`]?.[w]?.weight;
-                        return v ? { x: i, y: parseFloat(v) } : null;
-                      }).filter(Boolean);
-                      return pts;
-                    })();
-
                     return (
                       <div key={ex.name} style={{
                         background: isLogged ? UI.surface : "rgba(17,17,17,0.78)",
@@ -1376,25 +1367,6 @@
                                   </span>
                                 )}
                               </div>
-                              {sparkPoints.length >= 2 && (() => {
-                                const W = 64, H = 36;
-                                const xs = sparkPoints.map(d => d.x), ys = sparkPoints.map(d => d.y);
-                                const minX = Math.min(...xs), maxX = Math.max(...xs);
-                                const minY = Math.min(...ys), maxY = Math.max(...ys);
-                                const rangeX = maxX - minX || 1, rangeY = maxY - minY || 1;
-                                const pts = sparkPoints.map(d => `${((d.x - minX) / rangeX) * W},${H - 2 - ((d.y - minY) / rangeY) * (H - 4)}`).join(" ");
-                                const lastPt = sparkPoints[sparkPoints.length - 1];
-                                const lastX = ((lastPt.x - minX) / rangeX) * W;
-                                const lastY = H - 2 - ((lastPt.y - minY) / rangeY) * (H - 4);
-                                return (
-                                  <div style={{ marginTop: 8 }}>
-                                    <svg width={W} height={H} style={{ display: "block", overflow: "visible" }}>
-                                      <polyline points={pts} fill="none" stroke={UI.borderVisible} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-                                      <circle cx={lastX} cy={lastY} r="2.5" fill={isLogged ? UI.display : UI.secondary} />
-                                    </svg>
-                                  </div>
-                                );
-                              })()}
                             </div>
 
                             {/* Right: inputs row on top, TypeToggle below */}
