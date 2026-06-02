@@ -913,6 +913,7 @@
         try { return localStorage.getItem("phase2_completed") === "true"; } catch (_) { return false; }
       });
       const [summaryDismissed, setSummaryDismissed] = useState(false);
+      const [volumeTooltip, setVolumeTooltip] = useState(false);
 
       const isPhaseComplete = useCallback(() => {
         const weekKeys = WEEKS_P2.filter(w => !w.includes("Deload"));
@@ -1097,6 +1098,7 @@
       }, 0);
       const sessionRPEs = workingExercises.map(ex => rpeLog[`${activeDay}||${ex.name}`]?.[activeWeek]).filter(r => r !== undefined && r !== "").map(Number);
       const avgRPE = sessionRPEs.length ? (sessionRPEs.reduce((a, b) => a + b, 0) / sessionRPEs.length).toFixed(1) : null;
+      const totalSets = workingExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").reduce((sum, ex) => sum + (parseInt(ex.sets) || 0), 0);
       const activeWeekLabel = `Week ${activeWeek.match(/\d+/)?.[0] || ""}`.trim();
 
       const syncStyles = {
@@ -1375,7 +1377,7 @@
                                 )}
                               </div>
                               {sparkPoints.length >= 2 && (() => {
-                                const W = 64, H = 18;
+                                const W = 64, H = 36;
                                 const xs = sparkPoints.map(d => d.x), ys = sparkPoints.map(d => d.y);
                                 const minX = Math.min(...xs), maxX = Math.max(...xs);
                                 const minY = Math.min(...ys), maxY = Math.max(...ys);
@@ -1451,7 +1453,11 @@
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <div style={{ flex: 1, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 6, padding: "12px 14px" }}>
-                  <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em", marginBottom: 6 }}>VOLUME</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
+                    <span style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em" }}>VOLUME</span>
+                    <span onClick={() => setVolumeTooltip(v => !v)} style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, cursor: "pointer", lineHeight: 1 }}>ℹ</span>
+                  </div>
+                  {volumeTooltip && <div style={{ fontFamily: UI.mono, fontSize: 8, color: UI.secondary, marginBottom: 5, letterSpacing: "0.04em" }}>sets × reps × kg</div>}
                   <div style={{ fontFamily: UI.mono, fontSize: 18, fontWeight: 700, color: UI.primary }}>{sessionVolume > 0 ? `${Math.round(sessionVolume).toLocaleString()}` : "—"}</div>
                   {sessionVolume > 0 && <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>kg total</div>}
                 </div>
@@ -1464,6 +1470,11 @@
                   <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em", marginBottom: 6 }}>EXERCISES</div>
                   <div style={{ fontFamily: UI.mono, fontSize: 18, fontWeight: 700, color: UI.primary }}>{loggedCount}</div>
                   <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>logged</div>
+                </div>
+                <div style={{ flex: 1, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 6, padding: "12px 14px" }}>
+                  <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em", marginBottom: 6 }}>SETS</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 18, fontWeight: 700, color: UI.primary }}>{totalSets}</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>working</div>
                 </div>
               </div>
             </div>
