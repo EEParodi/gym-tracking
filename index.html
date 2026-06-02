@@ -43,6 +43,10 @@
     ::-webkit-scrollbar-track { background: #000; }
     ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
     input::placeholder { color: #666; }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
   </style>
 </head>
 <body>
@@ -908,6 +912,7 @@
       const [phaseCompleted, setPhaseCompleted] = useState(() => {
         try { return localStorage.getItem("phase2_completed") === "true"; } catch (_) { return false; }
       });
+      const [summaryDismissed, setSummaryDismissed] = useState(false);
 
       const isPhaseComplete = useCallback(() => {
         const weekKeys = WEEKS_P2.filter(w => !w.includes("Deload"));
@@ -1074,11 +1079,24 @@
         setTimeout(() => setImportStatus("idle"), 3000);
       };
 
+      useEffect(() => { setSummaryDismissed(false); }, [activeDay]);
+
       const exercises = PROGRAM_P2[activeDay] || [];
       const sections = [...new Set(exercises.map(e => e.section))];
       const workingExercises = exercises.filter(e => e.section !== "WARM UP");
       const loggedCount = workingExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").length;
       const progressLabel = `${loggedCount}/${workingExercises.length}`;
+      const allWorkingLogged = workingExercises.length > 0 && loggedCount === workingExercises.length;
+      const showSummary = allWorkingLogged && !summaryDismissed;
+      const sessionVolume = workingExercises.reduce((total, ex) => {
+        const wv = getVal(activeDay, ex.name, "weight");
+        if (!wv || getType(activeDay, ex.name) === "bw") return total;
+        const sets = parseInt(ex.sets) || 0;
+        const reps = parseInt(ex.reps) || 0;
+        return total + sets * reps * parseFloat(wv);
+      }, 0);
+      const sessionRPEs = workingExercises.map(ex => rpeLog[`${activeDay}||${ex.name}`]?.[activeWeek]).filter(r => r !== undefined && r !== "").map(Number);
+      const avgRPE = sessionRPEs.length ? (sessionRPEs.reduce((a, b) => a + b, 0) / sessionRPEs.length).toFixed(1) : null;
       const activeWeekLabel = `Week ${activeWeek.match(/\d+/)?.[0] || ""}`.trim();
 
       const syncStyles = {
@@ -1289,6 +1307,16 @@
                       return kg;
                     })();
                     const suggestedKg = rpeBasedSuggestion || staticSuggestedKg;
+                    const prevWeekWeights = WEEKS_P2.slice(0, WEEKS_P2.indexOf(activeWeek)).map(w => weights[`${activeDay}||${ex.name}`]?.[w]?.weight).filter(Boolean).map(parseFloat);
+                    const isPR = wVal && !isBW && prevWeekWeights.length > 0 && parseFloat(wVal) > Math.max(...prevWeekWeights);
+                    const sparkPoints = (() => {
+                      if (isBW) return [];
+                      const pts = WEEKS_P2.map((w, i) => {
+                        const v = weights[`${activeDay}||${ex.name}`]?.[w]?.weight;
+                        return v ? { x: i, y: parseFloat(v) } : null;
+                      }).filter(Boolean);
+                      return pts;
+                    })();
 
                     return (
                       <div key={ex.name} style={{
@@ -1335,12 +1363,36 @@
                                     </span>
                                   );
                                 })()}
+                                {isPR && (
+                                  <span style={{ fontFamily: UI.mono, fontSize: 10, fontWeight: 700, color: UI.warning, background: "rgba(212,168,67,0.12)", border: `1px solid rgba(212,168,67,0.5)`, borderRadius: 3, padding: "3px 6px" }}>
+                                    PR
+                                  </span>
+                                )}
                                 {ex.cue && (
                                   <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled }}>
                                     {isExpanded ? "▲ CUE" : "▼ CUE"}
                                   </span>
                                 )}
                               </div>
+                              {sparkPoints.length >= 2 && (() => {
+                                const W = 64, H = 18;
+                                const xs = sparkPoints.map(d => d.x), ys = sparkPoints.map(d => d.y);
+                                const minX = Math.min(...xs), maxX = Math.max(...xs);
+                                const minY = Math.min(...ys), maxY = Math.max(...ys);
+                                const rangeX = maxX - minX || 1, rangeY = maxY - minY || 1;
+                                const pts = sparkPoints.map(d => `${((d.x - minX) / rangeX) * W},${H - 2 - ((d.y - minY) / rangeY) * (H - 4)}`).join(" ");
+                                const lastPt = sparkPoints[sparkPoints.length - 1];
+                                const lastX = ((lastPt.x - minX) / rangeX) * W;
+                                const lastY = H - 2 - ((lastPt.y - minY) / rangeY) * (H - 4);
+                                return (
+                                  <div style={{ marginTop: 8 }}>
+                                    <svg width={W} height={H} style={{ display: "block", overflow: "visible" }}>
+                                      <polyline points={pts} fill="none" stroke={UI.borderVisible} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+                                      <circle cx={lastX} cy={lastY} r="2.5" fill={isLogged ? UI.display : UI.secondary} />
+                                    </svg>
+                                  </div>
+                                );
+                              })()}
                             </div>
 
                             {/* Right: inputs row on top, TypeToggle below */}
@@ -1386,6 +1438,36 @@
               );
             })}
           </div>
+
+          {/* Session Summary Bottom Sheet */}
+          {showSummary && (
+            <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: UI.surface, borderTop: `1px solid ${UI.borderVisible}`, borderRadius: "14px 14px 0 0", padding: "20px 20px 40px", zIndex: 100, animation: "slideUp 0.25s cubic-bezier(0.25,0.1,0.25,1)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+                <div>
+                  <div style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 13, letterSpacing: "0.1em", color: UI.display }}>SESSION COMPLETE</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, letterSpacing: "0.06em", marginTop: 3 }}>{activeDay.toUpperCase()} · {activeWeek}</div>
+                </div>
+                <button onClick={() => setSummaryDismissed(true)} style={{ background: "none", border: `1px solid ${UI.border}`, borderRadius: 4, color: UI.disabled, fontSize: 14, cursor: "pointer", padding: "4px 10px", fontFamily: UI.mono }}>✕</button>
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <div style={{ flex: 1, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 6, padding: "12px 14px" }}>
+                  <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em", marginBottom: 6 }}>VOLUME</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 18, fontWeight: 700, color: UI.primary }}>{sessionVolume > 0 ? `${Math.round(sessionVolume).toLocaleString()}` : "—"}</div>
+                  {sessionVolume > 0 && <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>kg total</div>}
+                </div>
+                <div style={{ flex: 1, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 6, padding: "12px 14px" }}>
+                  <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em", marginBottom: 6 }}>AVG RPE</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 18, fontWeight: 700, color: avgRPE ? (Number(avgRPE) <= 7 ? UI.success : Number(avgRPE) <= 8.5 ? UI.warning : UI.accent) : UI.disabled }}>{avgRPE || "—"}</div>
+                  {avgRPE && <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>/ 10</div>}
+                </div>
+                <div style={{ flex: 1, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 6, padding: "12px 14px" }}>
+                  <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em", marginBottom: 6 }}>EXERCISES</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 18, fontWeight: 700, color: UI.primary }}>{loggedCount}</div>
+                  <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>logged</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
