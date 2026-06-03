@@ -101,10 +101,13 @@ An exercise is considered logged if it has a weight value OR its type is `"bw"`.
 ---
 
 ## Component Structure
-Keep everything in a single `App` component for now — no need to split into sub-components until the file exceeds ~600 lines or a piece of UI is reused 3+ times.
+Keep everything in `index.html` — no need to split into separate files.
 
-Exceptions already componentized:
-- `TypeToggle` — the BB/DB/BW selector
+Componentized pieces:
+- `Tracker` — unified phase tracker, config-driven via `PHASE_CONFIG`
+- `RPEInput` — RPE text input (Phase 2 only, rendered inside Tracker)
+- `PhaseLanding` — phase selector + magic-link login
+- `TypeToggle` — BB/DB/BW selector
 
 ---
 
@@ -121,7 +124,7 @@ Exceptions already componentized:
 - ❌ Never use Tailwind
 - ❌ Never use separate CSS files — inline styles only
 - ❌ Never show all-time best weight — always show previous week specifically
-- ❌ Never use `position: fixed` — breaks iframe rendering in Claude artifacts
+- ✅ `position: fixed` is permitted — app runs on GitHub Pages, not Claude artifacts
 - ❌ Never split into multiple HTML/JS files — single file is the constraint
 - ❌ Never auto-sync to Sheets without user intent — sync is always manual
 - Plan: add a controlled migration path to Supabase and modularize the frontend for backend-driven evolution.

@@ -241,22 +241,22 @@
 
     // === HELPERS ===
 
-    function getPrevWeight(weights, day, exercise, currentWeek) {
-      const weekIdx = WEEKS.indexOf(currentWeek);
+    function getPrevWeight(weights, day, exercise, currentWeek, weeks = WEEKS) {
+      const weekIdx = weeks.indexOf(currentWeek);
       if (weekIdx <= 0) return null;
       for (let i = weekIdx - 1; i >= 0; i--) {
-        const w = weights[`${day}||${exercise}`]?.[WEEKS[i]]?.weight;
-        if (w) return { weight: w, week: WEEKS[i] };
+        const w = weights[`${day}||${exercise}`]?.[weeks[i]]?.weight;
+        if (w) return { weight: w, week: weeks[i] };
       }
       return null;
     }
 
-    function getPrevRPE(rpeLog, day, exercise, currentWeek) {
-      const weekIdx = WEEKS.indexOf(currentWeek);
+    function getPrevRPE(rpeLog, day, exercise, currentWeek, weeks = WEEKS) {
+      const weekIdx = weeks.indexOf(currentWeek);
       if (weekIdx <= 0) return null;
       for (let i = weekIdx - 1; i >= 0; i--) {
-        const r = rpeLog[`${day}||${exercise}`]?.[WEEKS[i]];
-        if (r !== undefined && r !== "") return { rpe: r, week: WEEKS[i] };
+        const r = rpeLog[`${day}||${exercise}`]?.[weeks[i]];
+        if (r !== undefined && r !== "") return { rpe: r, week: weeks[i] };
       }
       return null;
     }
@@ -432,474 +432,37 @@
       );
     }
 
-    // === PHASE 1 TRACKER ===
+    // === TRACKER ===
 
-    function Phase1Tracker({ cloudUser, onBack, phase1Completed, setPhase1Completed }) {
-      const [activeDay, setActiveDay] = useState("Day 1");
-      const [activeWeek, setActiveWeek] = useState("W1");
-      const [weights, setWeights] = useState({});
-      const [types, setTypes] = useState({});
-      const [collapsedCues, setCollapsedCues] = useState(new Set());
-      const [collapsedSections, setCollapsedSections] = useState({});
-      const [saveStatus, setSaveStatus] = useState("");
-      const [syncStatus, setSyncStatus] = useState("idle");
-      const [importStatus, setImportStatus] = useState("idle");
+    const PHASE_CONFIG = {
+      phase1: {
+        label: "PHASE 1",
+        program: PROGRAM, weeks: WEEKS, meta: TRACKER_META,
+        storageKey: STORAGE_KEY, typesKey: TYPES_KEY, rpeKey: null,
+        completedKey: "phase1_completed", phaseKey: "phase1",
+        optionalDay: "Day 5 (Optional)", defaultDay: "Day 1",
+        dayLabel: d => d.split(" ").slice(0, 2).join(" ").toUpperCase(),
+        hasRPE: false, hasNotes: true,
+        hydrateFn: "hydrateTrackerStateFromSupabase",
+        upsertFn: "upsertTrackerStateToSupabase",
+        migrateFn: "migrateLocalToSupabaseIfNeeded",
+      },
+      phase2: {
+        label: "PHASE 2",
+        program: PROGRAM_P2, weeks: WEEKS_P2, meta: TRACKER_META_P2,
+        storageKey: STORAGE_KEY_P2, typesKey: TYPES_KEY_P2, rpeKey: RPE_KEY_P2,
+        completedKey: "phase2_completed", phaseKey: "phase2",
+        optionalDay: null, defaultDay: "Monday",
+        dayLabel: d => d.toUpperCase(),
+        hasRPE: true, hasNotes: false,
+        hydrateFn: "hydrateP2TrackerState",
+        upsertFn: "upsertP2TrackerState",
+        migrateFn: null,
+      },
+    };
 
-      const isPhaseComplete = useCallback(() => {
-        const weekKeys = WEEKS.filter(w => !w.includes("Deload"));
-        let total = 0, logged = 0;
-        for (const day of Object.keys(PROGRAM)) {
-          if (day === "Day 5 (Optional)") continue;
-          const exercises = PROGRAM[day].filter(e => e.section !== "WARM UP");
-          for (const ex of exercises) {
-            for (const wk of weekKeys) {
-              total++;
-              const key = `${day}||${ex.name}`;
-              if (weights[key]?.[wk]?.weight || types[key] === "bw") { logged++; }
-            }
-          }
-        }
-        return total > 0 && logged >= total;
-      }, [weights, types]);
-
-      // Load from localStorage on mount
-      useEffect(() => {
-        try {
-          const saved = localStorage.getItem(STORAGE_KEY);
-          if (saved) setWeights(JSON.parse(saved));
-          const savedTypes = localStorage.getItem(TYPES_KEY);
-          if (savedTypes) setTypes(JSON.parse(savedTypes));
-        } catch (_) {}
-      }, []);
-
-      // Sync from cloud when cloudUser is available
-      useEffect(() => {
-        if (!cloudUser?.id || !window.supabase?.hydrateTrackerStateFromSupabase) return;
-        let alive = true;
-        const syncFromCloud = async () => {
-          const remote = await window.supabase.hydrateTrackerStateFromSupabase(cloudUser.id);
-          if (!alive) return;
-          const remoteHasData = Object.keys(remote?.weights || {}).length > 0;
-          if (remoteHasData) {
-            setWeights(remote.weights);
-            setTypes(remote.types);
-            try {
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(remote.weights));
-              localStorage.setItem(TYPES_KEY, JSON.stringify(remote.types));
-            } catch (_) {}
-            return;
-          }
-          const migrated = await window.supabase.migrateLocalToSupabaseIfNeeded(cloudUser.id);
-          if (!alive || migrated?.error) return;
-          if ((migrated?.migrated || 0) > 0) {
-            const refreshed = await window.supabase.hydrateTrackerStateFromSupabase(cloudUser.id);
-            if (!alive) return;
-            setWeights(refreshed.weights || {});
-            setTypes(refreshed.types || {});
-            try {
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(refreshed.weights || {}));
-              localStorage.setItem(TYPES_KEY, JSON.stringify(refreshed.types || {}));
-            } catch (_) {}
-          }
-        };
-        syncFromCloud();
-        return () => { alive = false; };
-      }, [cloudUser?.id]);
-
-      const save = useCallback((newWeights) => {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(newWeights));
-          localStorage.setItem(LAST_PHASE_KEY, "phase1");
-          setSaveStatus("saved");
-          setTimeout(() => setSaveStatus(""), 1200);
-        } catch (_) {
-          setSaveStatus("error");
-          setTimeout(() => setSaveStatus(""), 2500);
-        }
-      }, []);
-
-      const saveTypes = useCallback((newTypes) => {
-        try {
-          localStorage.setItem(TYPES_KEY, JSON.stringify(newTypes));
-          localStorage.setItem(LAST_PHASE_KEY, "phase1");
-        } catch (_) { console.warn("Failed to save types to localStorage"); }
-      }, []);
-
-      const handleWeight = (day, exercise, value) => {
-        const key = `${day}||${exercise}`;
-        const updated = {
-          ...weights,
-          [key]: { ...(weights[key] || {}), [activeWeek]: { ...(weights[key]?.[activeWeek] || {}), weight: value } }
-        };
-        setWeights(updated);
-        save(updated);
-      };
-
-      const handleComment = (day, exercise, value) => {
-        const key = `${day}||${exercise}`;
-        const updated = {
-          ...weights,
-          [key]: { ...(weights[key] || {}), [activeWeek]: { ...(weights[key]?.[activeWeek] || {}), comment: value } }
-        };
-        setWeights(updated);
-        save(updated);
-      };
-
-      const handleType = (day, exercise, typeVal) => {
-        const key = `${day}||${exercise}`;
-        const updated = { ...types, [key]: typeVal };
-        setTypes(updated);
-        saveTypes(updated);
-        if (typeVal === "bw") handleWeight(day, exercise, "");
-      };
-
-      const getVal = (day, exercise, field) => weights[`${day}||${exercise}`]?.[activeWeek]?.[field] || "";
-      const getType = (day, exercise) => types[`${day}||${exercise}`] || null;
-
-      const syncToCloud = async () => {
-        if (!cloudUser?.id) {
-          setSyncStatus("no-auth");
-          setTimeout(() => setSyncStatus("idle"), 2000);
-          return;
-        }
-        if (!window.supabase?.upsertTrackerStateToSupabase) {
-          setSyncStatus("error");
-          setTimeout(() => setSyncStatus("idle"), 2000);
-          return;
-        }
-        setSyncStatus("syncing");
-        const payload = { userId: cloudUser.id, weights, types, metaByKey: TRACKER_META };
-        const result = await window.supabase.upsertTrackerStateToSupabase(payload);
-        if (result?.error) {
-          setSyncStatus("error");
-          setTimeout(() => setSyncStatus("idle"), 3000);
-          return;
-        }
-        if (!Object.keys(weights).length) {
-          setSyncStatus("empty");
-          setTimeout(() => setSyncStatus("idle"), 2500);
-          return;
-        }
-        setSyncStatus("ok");
-        setTimeout(() => setSyncStatus("idle"), 3000);
-      };
-
-      const importFromCloud = async () => {
-        if (!cloudUser?.id || !window.supabase?.hydrateTrackerStateFromSupabase) {
-          setImportStatus("error");
-          setTimeout(() => setImportStatus("idle"), 2000);
-          return;
-        }
-        setImportStatus("importing");
-        const remote = await window.supabase.hydrateTrackerStateFromSupabase(cloudUser.id);
-        const rowsLoaded = Object.keys(remote?.weights || {}).length;
-        if (!rowsLoaded) {
-          setImportStatus("empty");
-          setTimeout(() => setImportStatus("idle"), 2500);
-          return;
-        }
-        setWeights(remote.weights || {});
-        setTypes(remote.types || {});
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(remote.weights || {}));
-          localStorage.setItem(TYPES_KEY, JSON.stringify(remote.types || {}));
-          localStorage.setItem(LAST_PHASE_KEY, "phase1");
-        } catch (_) {}
-        setImportStatus("ok");
-        setTimeout(() => setImportStatus("idle"), 3000);
-      };
-
-      const exercises = PROGRAM[activeDay] || [];
-      const sections = [...new Set(exercises.map(e => e.section))];
-      const workingExercises = exercises.filter(e => e.section !== "WARM UP");
-      const loggedCount = workingExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").length;
-      const progressLabel = `${loggedCount}/${workingExercises.length}`;
-      const activeWeekLabel = `Week ${activeWeek.match(/\d+/)?.[0] || ""}`.trim();
-
-      const syncStyles = {
-        idle:    { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: cloudUser ? "SYNC CLOUD" : "CLOUD LOCKED" },
-        syncing: { bg: UI.black, border: UI.borderVisible, color: UI.disabled, label: "SYNCING" },
-        ok:      { bg: UI.black, border: UI.success, color: UI.success, label: "SAVED CLOUD" },
-        empty:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "NO DATA" },
-        "no-auth": { bg: "rgba(215,150,0,0.15)", border: UI.warning, color: UI.warning, label: "NOT LOGGED IN" },
-        error:   { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "SYNC ERROR" },
-      }[syncStatus];
-
-      const importStyles = {
-        idle:      { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: cloudUser ? "LOAD CLOUD" : "CLOUD LOCKED" },
-        importing: { bg: UI.black, border: UI.borderVisible, color: UI.disabled, label: "IMPORTING" },
-        ok:        { bg: UI.black, border: UI.success, color: UI.success, label: "LOADED" },
-        empty:     { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "NO ROWS" },
-        error:     { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "IMPORT ERROR" },
-      }[importStatus];
-
-      return (
-        <div style={{ fontFamily: UI.sans, background: "transparent", minHeight: "100vh", color: UI.primary, paddingBottom: 80 }}>
-
-          {/* Header */}
-          <div style={{ background: "rgba(0,0,0,0.94)", borderBottom: `1px solid ${UI.border}`, padding: "20px 16px 18px", position: "sticky", top: 0, zIndex: 10 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                <div style={{ fontFamily: UI.displayFont, fontSize: 44, lineHeight: 0.9, letterSpacing: "-0.06em", color: UI.display }}>PHASE 1</div>
-                <div style={{ paddingTop: 2 }}>
-                  <div style={{ fontSize: 24, lineHeight: 1.08, letterSpacing: "-0.03em", color: UI.display, marginTop: 3 }}>{activeWeekLabel}</div>
-                  <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: UI.disabled, marginTop: 7 }}>{progressLabel} WORKING SETS LOGGED</div>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: "column" }}>
-                {saveStatus === "saved" && <div style={{ fontSize: 11, color: UI.success, fontFamily: UI.mono, letterSpacing: "0.08em" }}>[SAVED]</div>}
-                {saveStatus === "error" && <div style={{ fontSize: 11, color: UI.accent, fontFamily: UI.mono, letterSpacing: "0.08em" }}>[SAVE FAILED]</div>}
-                <div style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, letterSpacing: "0.08em" }}>
-                  {cloudUser ? `CLOUD / ${cloudUser.email || cloudUser.id}` : "CLOUD / OFFLINE"}
-                </div>
-                <button onClick={importFromCloud} disabled={importStatus === "importing" || !cloudUser} style={{
-                  background: importStyles.bg, border: `1px solid ${importStyles.border}`,
-                  borderRadius: 4, cursor: importStatus === "importing" || !cloudUser ? "default" : "pointer",
-                  padding: "8px 11px", color: importStyles.color,
-                  fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
-                  transition: UI.ease, whiteSpace: "nowrap"
-                }}>
-                  {importStyles.label}
-                </button>
-                <button onClick={syncToCloud} disabled={syncStatus === "syncing" || !cloudUser} style={{
-                  background: syncStyles.bg, border: `1px solid ${syncStyles.border}`,
-                  borderRadius: 4, cursor: syncStatus === "syncing" || !cloudUser ? "default" : "pointer",
-                  padding: "8px 11px", color: syncStyles.color,
-                  fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
-                  transition: UI.ease, whiteSpace: "nowrap"
-                }}>
-                  {syncStyles.label}
-                </button>
-              </div>
-            </div>
-            <div style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={onBack} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
-                  ALL PHASES
-                </button>
-                {!phase1Completed && isPhaseComplete() && (
-                  <button onClick={() => {
-                    if (confirm("End Phase 1? This will freeze the phase and mark it as complete.")) {
-                      setPhase1Completed(true);
-                      try { localStorage.setItem("phase1_completed", "true"); } catch (_) {}
-                    }
-                  }} style={{ background: UI.accent, border: `1px solid ${UI.accent}`, borderRadius: 4, padding: "7px 10px", color: UI.black, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
-                    END PHASE
-                  </button>
-                )}
-                {phase1Completed && (
-                  <button onClick={() => {
-                    if (confirm("Reopen Phase 1 for edits? This will allow new entries.")) {
-                      setPhase1Completed(false);
-                      try { localStorage.setItem("phase1_completed", "false"); } catch (_) {}
-                    }
-                  }} style={{ background: UI.black, border: `1px solid ${UI.warning}`, borderRadius: 4, padding: "7px 10px", color: UI.warning, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
-                    EDIT LOG
-                  </button>
-                )}
-                {phase1Completed && (
-                  <button onClick={() => {
-                    const escapeCsv = s => `"${String(s).replace(/"/g, '""')}"`;
-                    const rows = [["Exercise", "Section", "Week", "Day", "Weight", "Type", "Comment"].join(",")];
-                    for (const day of Object.keys(PROGRAM)) {
-                      for (const ex of PROGRAM[day]) {
-                        for (const wk of WEEKS) {
-                          const key = `${day}||${ex.name}`;
-                          const w = weights[key]?.[wk];
-                          if (w?.weight || types[key] === "bw") {
-                            rows.push([escapeCsv(ex.name), escapeCsv(ex.section), escapeCsv(wk), escapeCsv(day), w?.weight || "", escapeCsv(types[key] || ""), escapeCsv(w?.comment || "")].join(","));
-                          }
-                        }
-                      }
-                    }
-                    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `phase1_export_${new Date().toISOString().slice(0, 10)}.csv`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
-                    EXPORT CSV
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Week Tabs */}
-          <div style={{ background: UI.black, borderBottom: `1px solid ${UI.border}`, padding: "0 16px", display: "flex", gap: 0, overflowX: "auto" }}>
-            {WEEKS.map(w => (
-              <button key={w} onClick={() => setActiveWeek(w)} style={{
-                background: "none", border: "none", cursor: "pointer",
-                padding: "13px 14px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-                fontFamily: UI.mono,
-                color: activeWeek === w ? UI.display : UI.disabled,
-                borderBottom: activeWeek === w ? `1px solid ${UI.accent}` : "1px solid transparent",
-                whiteSpace: "nowrap"
-              }}>
-                {w === "W5 (Deload)" ? "W5 DELOAD" : w}
-              </button>
-            ))}
-          </div>
-
-          {/* Day Selector */}
-          <div style={{ padding: "16px", display: "flex", gap: 8, overflowX: "auto" }}>
-            {DAYS.map(d => {
-              const workingDayEx = (PROGRAM[d] || []).filter(e => e.section !== "WARM UP");
-              const logged = workingDayEx.filter(e => getVal(d, e.name, "weight") || getType(d, e.name) === "bw").length;
-              return (
-                <button key={d} onClick={() => setActiveDay(d)} style={{
-                  background: activeDay === d ? UI.display : UI.black,
-                  border: `1px solid ${activeDay === d ? UI.display : UI.borderVisible}`,
-                  borderRadius: 4, cursor: "pointer", padding: "9px 12px",
-                  color: activeDay === d ? UI.black : UI.secondary,
-                  fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
-                  whiteSpace: "nowrap", minWidth: 70, transition: UI.ease
-                }}>
-                  <div>{d.split(" ").slice(0, 2).join(" ").toUpperCase()}</div>
-                  <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.62, marginTop: 4 }}>{logged}/{workingDayEx.length}</div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Deload Banner */}
-          {activeWeek === "W5 (Deload)" && (
-            <div style={{ margin: "0 16px 24px", padding: "12px 14px", background: UI.black, border: `1px solid ${UI.warning}`, borderRadius: 4, fontFamily: UI.mono, fontSize: 11, color: UI.warning, lineHeight: 1.5, letterSpacing: "0.03em" }}>
-              [DELOAD] CUT LOADS 40-50%. 2 SETS PER EXERCISE. EASY IS THE POINT.
-            </div>
-          )}
-
-          {/* Exercises */}
-          <div style={{ padding: "0 16px" }}>
-            {sections.map(section => {
-              const sectionExercises = exercises.filter(e => e.section === section);
-              const color = SECTION_COLORS[section] || "#888";
-              const sectionLoggedCount = sectionExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").length;
-              const isWarmUp = section === "WARM UP";
-              const isWarmUpComplete = isWarmUp && sectionExercises.length > 0 && sectionLoggedCount === sectionExercises.length;
-              // Fix 1b: key collapse state per day+section so days don't share collapsed state
-              const collapseKey = `${activeDay}||${section}`;
-              const isCollapsed = isWarmUp && (collapsedSections[collapseKey] ?? false);
-              return (
-                <div key={section} style={{ marginBottom: 32 }}>
-                  <button
-                    onClick={() => isWarmUp && setCollapsedSections(prev => ({ ...prev, [collapseKey]: !isCollapsed }))}
-                    style={{
-                      width: "100%", display: "flex", alignItems: "center",
-                      justifyContent: "space-between", gap: 12,
-                      marginBottom: isCollapsed ? 0 : 12,
-                      background: "none", border: "none", padding: 0,
-                      cursor: isWarmUp ? "pointer" : "default", textAlign: "left",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 8, height: 8, background: color, borderRadius: 99 }} />
-                      <span style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary }}>{section}</span>
-                    </div>
-                    <span style={{ fontFamily: UI.mono, fontSize: 10, letterSpacing: "0.08em", color: UI.disabled }}>
-                      {isWarmUp ? `${sectionLoggedCount}/${sectionExercises.length} ${isCollapsed ? "OPEN" : "CLOSE"}` : `${sectionExercises.length} ITEMS`}
-                    </span>
-                  </button>
-
-                  {!isCollapsed && sectionExercises.map(ex => {
-                    const wVal = getVal(activeDay, ex.name, "weight");
-                    const cVal = getVal(activeDay, ex.name, "comment");
-                    const exType = getType(activeDay, ex.name);
-                    const isBW = exType === "bw";
-                    const cueKey = `${activeDay}||${ex.name}`;
-                    const isExpanded = ex.cue && !collapsedCues.has(cueKey);
-                    const prev = getPrevWeight(weights, activeDay, ex.name, activeWeek);
-                    const isLogged = wVal || isBW;
-
-                    return (
-                      <div key={ex.name} style={{
-                        background: isLogged ? UI.surface : "rgba(17,17,17,0.78)",
-                        border: `1px solid ${isLogged ? UI.borderVisible : UI.border}`,
-                        borderLeft: `2px solid ${isLogged ? color : UI.border}`,
-                        borderRadius: 6, marginBottom: 8,
-                      }}>
-                        <div style={{ padding: "13px 14px" }}>
-                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-
-                            {/* Left column is tappable for cue expand */}
-                            <div
-                              onClick={() => { if (!ex.cue) return; setCollapsedCues(prev => { const s = new Set(prev); s.has(cueKey) ? s.delete(cueKey) : s.add(cueKey); return s; }); }}
-                              style={{ flex: 1, cursor: ex.cue ? "pointer" : "default" }}
-                            >
-                              <div style={{ fontSize: 15, fontWeight: 500, color: isLogged ? UI.display : UI.primary, lineHeight: 1.25, letterSpacing: "-0.01em" }}>{ex.name}</div>
-                              <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
-                                <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>{ex.sets}x{ex.reps}</span>
-                                <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>RPE {ex.rpe}</span>
-                                {prev && !isBW && (
-                                  <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.warning, background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 3, padding: "3px 6px" }}>
-                                    {prev.week}: {prev.weight}kg
-                                  </span>
-                                )}
-                                {ex.cue && (
-                                  <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled }}>
-                                    {isExpanded ? "▲ CUE" : "▼ CUE"}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Right: weight input + type toggle */}
-                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                placeholder={isBW ? "BW" : "kg"}
-                                value={isBW ? "" : wVal}
-                                disabled={isBW}
-                                onChange={e => handleWeight(activeDay, ex.name, e.target.value)}
-                                style={{
-                                  width: 72, background: isBW ? UI.surface : UI.black,
-                                  border: `1px solid ${wVal && !isBW ? UI.display : UI.borderVisible}`,
-                                  borderRadius: 4, padding: "7px 9px",
-                                  color: isBW ? UI.disabled : wVal ? UI.display : UI.disabled,
-                                  fontSize: 13, fontFamily: UI.mono,
-                                  fontWeight: 700, outline: "none", textAlign: "center",
-                                  letterSpacing: "0.02em"
-                                }}
-                              />
-                              <TypeToggle value={exType} onChange={(t) => handleType(activeDay, ex.name, t)} />
-                            </div>
-                          </div>
-
-                          {isExpanded && ex.cue && (
-                            <div style={{ marginTop: 12, padding: "9px 10px", background: UI.black, borderRadius: 4, borderLeft: `2px solid ${color}`, fontSize: 12, color: UI.secondary, lineHeight: 1.5 }}>
-                              {ex.cue}
-                            </div>
-                          )}
-
-                          <input
-                            type="text" placeholder="notes..."
-                            value={cVal}
-                            onChange={e => handleComment(activeDay, ex.name, e.target.value)}
-                            style={{
-                              width: "100%", marginTop: 10, background: UI.black,
-                              border: `1px solid ${UI.border}`, borderRadius: 4, padding: "7px 9px",
-                              color: UI.secondary, fontSize: 12, outline: "none", fontFamily: UI.sans
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // === PHASE 2 TRACKER ===
-
-    function Phase2Tracker({ cloudUser, onBack }) {
-      const [activeDay, setActiveDay] = useState("Monday");
+    function Tracker({ config, cloudUser, onBack, completed, setCompleted }) {
+      const [activeDay, setActiveDay] = useState(config.defaultDay);
       const [activeWeek, setActiveWeek] = useState("W1");
       const [weights, setWeights] = useState({});
       const [types, setTypes] = useState({});
@@ -909,18 +472,14 @@
       const [saveStatus, setSaveStatus] = useState("");
       const [syncStatus, setSyncStatus] = useState("idle");
       const [importStatus, setImportStatus] = useState("idle");
-      const [phaseCompleted, setPhaseCompleted] = useState(() => {
-        try { return localStorage.getItem("phase2_completed") === "true"; } catch (_) { return false; }
-      });
       const [summaryDismissed, setSummaryDismissed] = useState(false);
-      const [volumeTooltip, setVolumeTooltip] = useState(false);
 
       const isPhaseComplete = useCallback(() => {
-        const weekKeys = WEEKS_P2.filter(w => !w.includes("Deload"));
+        const weekKeys = config.weeks.filter(w => !w.includes("Deload"));
         let total = 0, logged = 0;
-        for (const day of Object.keys(PROGRAM_P2)) {
-          if (day === "Saturday (Optional)") continue;
-          const exercises = PROGRAM_P2[day].filter(e => e.section !== "WARM UP");
+        for (const day of Object.keys(config.program)) {
+          if (config.optionalDay && day === config.optionalDay) continue;
+          const exercises = config.program[day].filter(e => e.section !== "WARM UP");
           for (const ex of exercises) {
             for (const wk of weekKeys) {
               total++;
@@ -932,35 +491,50 @@
         return total > 0 && logged >= total;
       }, [weights, types]);
 
-      // Load from localStorage on mount
       useEffect(() => {
         try {
-          const saved = localStorage.getItem(STORAGE_KEY_P2);
+          const saved = localStorage.getItem(config.storageKey);
           if (saved) setWeights(JSON.parse(saved));
-          const savedTypes = localStorage.getItem(TYPES_KEY_P2);
+          const savedTypes = localStorage.getItem(config.typesKey);
           if (savedTypes) setTypes(JSON.parse(savedTypes));
-          const savedRpe = localStorage.getItem(RPE_KEY_P2);
-          if (savedRpe) setRpeLog(JSON.parse(savedRpe));
+          if (config.rpeKey) {
+            const savedRpe = localStorage.getItem(config.rpeKey);
+            if (savedRpe) setRpeLog(JSON.parse(savedRpe));
+          }
         } catch (_) {}
       }, []);
 
-      // Sync from cloud when cloudUser is available
       useEffect(() => {
-        if (!cloudUser?.id || !window.supabase?.hydrateP2TrackerState) return;
+        if (!cloudUser?.id || !window.supabase?.[config.hydrateFn]) return;
         let alive = true;
         const syncFromCloud = async () => {
-          const remote = await window.supabase.hydrateP2TrackerState(cloudUser.id);
+          const remote = await window.supabase[config.hydrateFn](cloudUser.id);
           if (!alive) return;
           const remoteHasData = Object.keys(remote?.weights || {}).length > 0;
           if (remoteHasData) {
             setWeights(remote.weights);
             setTypes(remote.types);
-            setRpeLog(remote.rpeLog || {});
+            if (config.hasRPE) setRpeLog(remote.rpeLog || {});
             try {
-              localStorage.setItem(STORAGE_KEY_P2, JSON.stringify(remote.weights));
-              localStorage.setItem(TYPES_KEY_P2, JSON.stringify(remote.types));
-              localStorage.setItem(RPE_KEY_P2, JSON.stringify(remote.rpeLog || {}));
+              localStorage.setItem(config.storageKey, JSON.stringify(remote.weights));
+              localStorage.setItem(config.typesKey, JSON.stringify(remote.types));
+              if (config.rpeKey) localStorage.setItem(config.rpeKey, JSON.stringify(remote.rpeLog || {}));
             } catch (_) {}
+            return;
+          }
+          if (config.migrateFn) {
+            const migrated = await window.supabase[config.migrateFn](cloudUser.id);
+            if (!alive || migrated?.error) return;
+            if ((migrated?.migrated || 0) > 0) {
+              const refreshed = await window.supabase[config.hydrateFn](cloudUser.id);
+              if (!alive) return;
+              setWeights(refreshed.weights || {});
+              setTypes(refreshed.types || {});
+              try {
+                localStorage.setItem(config.storageKey, JSON.stringify(refreshed.weights || {}));
+                localStorage.setItem(config.typesKey, JSON.stringify(refreshed.types || {}));
+              } catch (_) {}
+            }
           }
         };
         syncFromCloud();
@@ -969,8 +543,8 @@
 
       const save = useCallback((newWeights) => {
         try {
-          localStorage.setItem(STORAGE_KEY_P2, JSON.stringify(newWeights));
-          localStorage.setItem(LAST_PHASE_KEY, "phase2");
+          localStorage.setItem(config.storageKey, JSON.stringify(newWeights));
+          localStorage.setItem(LAST_PHASE_KEY, config.phaseKey);
           setSaveStatus("saved");
           setTimeout(() => setSaveStatus(""), 1200);
         } catch (_) {
@@ -981,8 +555,8 @@
 
       const saveTypes = useCallback((newTypes) => {
         try {
-          localStorage.setItem(TYPES_KEY_P2, JSON.stringify(newTypes));
-          localStorage.setItem(LAST_PHASE_KEY, "phase2");
+          localStorage.setItem(config.typesKey, JSON.stringify(newTypes));
+          localStorage.setItem(LAST_PHASE_KEY, config.phaseKey);
         } catch (_) { console.warn("Failed to save types to localStorage"); }
       }, []);
 
@@ -1018,7 +592,7 @@
         const key = `${day}||${exercise}`;
         const updated = { ...rpeLog, [key]: { ...(rpeLog[key] || {}), [activeWeek]: value } };
         setRpeLog(updated);
-        try { localStorage.setItem(RPE_KEY_P2, JSON.stringify(updated)); } catch (_) {}
+        try { localStorage.setItem(config.rpeKey, JSON.stringify(updated)); } catch (_) {}
       };
 
       const getVal = (day, exercise, field) => weights[`${day}||${exercise}`]?.[activeWeek]?.[field] || "";
@@ -1031,14 +605,15 @@
           setTimeout(() => setSyncStatus("idle"), 2000);
           return;
         }
-        if (!window.supabase?.upsertP2TrackerState) {
+        if (!window.supabase?.[config.upsertFn]) {
           setSyncStatus("error");
           setTimeout(() => setSyncStatus("idle"), 2000);
           return;
         }
         setSyncStatus("syncing");
-        const payload = { userId: cloudUser.id, weights, types, rpeLog, metaByKey: TRACKER_META_P2 };
-        const result = await window.supabase.upsertP2TrackerState(payload);
+        const payload = { userId: cloudUser.id, weights, types, metaByKey: config.meta };
+        if (config.hasRPE) payload.rpeLog = rpeLog;
+        const result = await window.supabase[config.upsertFn](payload);
         if (result?.error) {
           setSyncStatus("error");
           setTimeout(() => setSyncStatus("idle"), 3000);
@@ -1054,13 +629,13 @@
       };
 
       const importFromCloud = async () => {
-        if (!cloudUser?.id || !window.supabase?.hydrateP2TrackerState) {
+        if (!cloudUser?.id || !window.supabase?.[config.hydrateFn]) {
           setImportStatus("error");
           setTimeout(() => setImportStatus("idle"), 2000);
           return;
         }
         setImportStatus("importing");
-        const remote = await window.supabase.hydrateP2TrackerState(cloudUser.id);
+        const remote = await window.supabase[config.hydrateFn](cloudUser.id);
         const rowsLoaded = Object.keys(remote?.weights || {}).length;
         if (!rowsLoaded) {
           setImportStatus("empty");
@@ -1069,12 +644,12 @@
         }
         setWeights(remote.weights || {});
         setTypes(remote.types || {});
-        setRpeLog(remote.rpeLog || {});
+        if (config.hasRPE) setRpeLog(remote.rpeLog || {});
         try {
-          localStorage.setItem(STORAGE_KEY_P2, JSON.stringify(remote.weights || {}));
-          localStorage.setItem(TYPES_KEY_P2, JSON.stringify(remote.types || {}));
-          localStorage.setItem(RPE_KEY_P2, JSON.stringify(remote.rpeLog || {}));
-          localStorage.setItem(LAST_PHASE_KEY, "phase2");
+          localStorage.setItem(config.storageKey, JSON.stringify(remote.weights || {}));
+          localStorage.setItem(config.typesKey, JSON.stringify(remote.types || {}));
+          if (config.rpeKey) localStorage.setItem(config.rpeKey, JSON.stringify(remote.rpeLog || {}));
+          localStorage.setItem(LAST_PHASE_KEY, config.phaseKey);
         } catch (_) {}
         setImportStatus("ok");
         setTimeout(() => setImportStatus("idle"), 3000);
@@ -1082,24 +657,27 @@
 
       useEffect(() => { setSummaryDismissed(false); }, [activeDay]);
 
-      const exercises = PROGRAM_P2[activeDay] || [];
+      const exercises = config.program[activeDay] || [];
       const sections = [...new Set(exercises.map(e => e.section))];
       const workingExercises = exercises.filter(e => e.section !== "WARM UP");
       const loggedCount = workingExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").length;
       const progressLabel = `${loggedCount}/${workingExercises.length}`;
+      const activeWeekLabel = `Week ${activeWeek.match(/\d+/)?.[0] || ""}`.trim();
+
       const allWorkingLogged = workingExercises.length > 0 && loggedCount === workingExercises.length;
-      const showSummary = allWorkingLogged && !summaryDismissed;
-      const sessionVolume = workingExercises.reduce((total, ex) => {
+      const showSummary = config.hasRPE && allWorkingLogged && !summaryDismissed;
+      const sessionVolume = config.hasRPE ? workingExercises.reduce((total, ex) => {
         const wv = getVal(activeDay, ex.name, "weight");
         if (!wv || getType(activeDay, ex.name) === "bw") return total;
-        const sets = parseInt(ex.sets) || 0;
-        const reps = parseInt(ex.reps) || 0;
-        return total + sets * reps * parseFloat(wv);
-      }, 0);
-      const sessionRPEs = workingExercises.map(ex => rpeLog[`${activeDay}||${ex.name}`]?.[activeWeek]).filter(r => r !== undefined && r !== "").map(Number);
+        return total + (parseInt(ex.sets) || 0) * (parseInt(ex.reps) || 0) * parseFloat(wv);
+      }, 0) : 0;
+      const sessionRPEs = config.hasRPE
+        ? workingExercises.map(ex => rpeLog[`${activeDay}||${ex.name}`]?.[activeWeek]).filter(r => r !== undefined && r !== "").map(Number)
+        : [];
       const avgRPE = sessionRPEs.length ? (sessionRPEs.reduce((a, b) => a + b, 0) / sessionRPEs.length).toFixed(1) : null;
-      const totalSets = workingExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").reduce((sum, ex) => sum + (parseInt(ex.sets) || 0), 0);
-      const activeWeekLabel = `Week ${activeWeek.match(/\d+/)?.[0] || ""}`.trim();
+      const totalSets = config.hasRPE
+        ? workingExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").reduce((sum, ex) => sum + (parseInt(ex.sets) || 0), 0)
+        : 0;
 
       const syncStyles = {
         idle:    { bg: UI.black, border: UI.borderVisible, color: UI.secondary, label: cloudUser ? "SYNC CLOUD" : "CLOUD LOCKED" },
@@ -1118,6 +696,34 @@
         error:     { bg: "rgba(215,25,33,0.15)", border: UI.accent, color: UI.accent, label: "IMPORT ERROR" },
       }[importStatus];
 
+      const exportCsv = () => {
+        const escapeCsv = s => `"${String(s).replace(/"/g, '""')}"`;
+        const headers = ["Exercise", "Section", "Week", "Day", "Weight", "Type", ...(config.hasRPE ? ["RPE"] : []), "Comment"];
+        const rows = [headers.join(",")];
+        for (const day of Object.keys(config.program)) {
+          for (const ex of config.program[day]) {
+            for (const wk of config.weeks) {
+              const key = `${day}||${ex.name}`;
+              const w = weights[key]?.[wk];
+              const rpe = config.hasRPE ? (rpeLog[key]?.[wk] || "") : undefined;
+              if (w?.weight || types[key] === "bw") {
+                const cols = [escapeCsv(ex.name), escapeCsv(ex.section), escapeCsv(wk), escapeCsv(day), w?.weight || "", escapeCsv(types[key] || "")];
+                if (config.hasRPE) cols.push(rpe);
+                cols.push(escapeCsv(w?.comment || ""));
+                rows.push(cols.join(","));
+              }
+            }
+          }
+        }
+        const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${config.phaseKey}_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
       return (
         <div style={{ fontFamily: UI.sans, background: "transparent", minHeight: "100vh", color: UI.primary, paddingBottom: 80 }}>
 
@@ -1125,7 +731,7 @@
           <div style={{ background: "rgba(0,0,0,0.94)", borderBottom: `1px solid ${UI.border}`, padding: "20px 16px 18px", position: "sticky", top: 0, zIndex: 10 }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                <div style={{ fontFamily: UI.displayFont, fontSize: 44, lineHeight: 0.9, letterSpacing: "-0.06em", color: UI.display }}>PHASE 2</div>
+                <div style={{ fontFamily: UI.displayFont, fontSize: 44, lineHeight: 0.9, letterSpacing: "-0.06em", color: UI.display }}>{config.label}</div>
                 <div style={{ paddingTop: 2 }}>
                   <div style={{ fontSize: 24, lineHeight: 1.08, letterSpacing: "-0.03em", color: UI.display, marginTop: 3 }}>{activeWeekLabel}</div>
                   <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: UI.disabled, marginTop: 7 }}>{progressLabel} WORKING SETS LOGGED</div>
@@ -1162,50 +768,28 @@
                 <button onClick={onBack} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
                   ALL PHASES
                 </button>
-                {!phaseCompleted && isPhaseComplete() && (
+                {!completed && isPhaseComplete() && (
                   <button onClick={() => {
-                    if (confirm("End Phase 2? This will freeze the phase and mark it as complete.")) {
-                      setPhaseCompleted(true);
-                      try { localStorage.setItem("phase2_completed", "true"); } catch (_) {}
+                    if (confirm(`End ${config.label}? This will freeze the phase and mark it as complete.`)) {
+                      setCompleted(true);
+                      try { localStorage.setItem(config.completedKey, "true"); } catch (_) {}
                     }
                   }} style={{ background: UI.accent, border: `1px solid ${UI.accent}`, borderRadius: 4, padding: "7px 10px", color: UI.black, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
                     END PHASE
                   </button>
                 )}
-                {phaseCompleted && (
+                {completed && (
                   <button onClick={() => {
-                    if (confirm("Reopen Phase 2 for edits? This will allow new entries.")) {
-                      setPhaseCompleted(false);
-                      try { localStorage.setItem("phase2_completed", "false"); } catch (_) {}
+                    if (confirm(`Reopen ${config.label} for edits? This will allow new entries.`)) {
+                      setCompleted(false);
+                      try { localStorage.setItem(config.completedKey, "false"); } catch (_) {}
                     }
                   }} style={{ background: UI.black, border: `1px solid ${UI.warning}`, borderRadius: 4, padding: "7px 10px", color: UI.warning, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
                     EDIT LOG
                   </button>
                 )}
-                {phaseCompleted && (
-                  <button onClick={() => {
-                    const escapeCsv = s => `"${String(s).replace(/"/g, '""')}"`;
-                    const rows = [["Exercise", "Section", "Week", "Day", "Weight", "Type", "RPE", "Comment"].join(",")];
-                    for (const day of Object.keys(PROGRAM_P2)) {
-                      for (const ex of PROGRAM_P2[day]) {
-                        for (const wk of WEEKS_P2) {
-                          const key = `${day}||${ex.name}`;
-                          const w = weights[key]?.[wk];
-                          const rpe = rpeLog[key]?.[wk] || "";
-                          if (w?.weight || types[key] === "bw") {
-                            rows.push([escapeCsv(ex.name), escapeCsv(ex.section), escapeCsv(wk), escapeCsv(day), w?.weight || "", escapeCsv(types[key] || ""), rpe, escapeCsv(w?.comment || "")].join(","));
-                          }
-                        }
-                      }
-                    }
-                    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `phase2_export_${new Date().toISOString().slice(0, 10)}.csv`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
+                {completed && (
+                  <button onClick={exportCsv} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
                     EXPORT CSV
                   </button>
                 )}
@@ -1215,7 +799,7 @@
 
           {/* Week Tabs */}
           <div style={{ background: UI.black, borderBottom: `1px solid ${UI.border}`, padding: "0 16px", display: "flex", gap: 0, overflowX: "auto" }}>
-            {WEEKS_P2.map(w => (
+            {config.weeks.map(w => (
               <button key={w} onClick={() => setActiveWeek(w)} style={{
                 background: "none", border: "none", cursor: "pointer",
                 padding: "13px 14px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
@@ -1231,8 +815,8 @@
 
           {/* Day Selector */}
           <div style={{ padding: "16px", display: "flex", gap: 8, overflowX: "auto" }}>
-            {Object.keys(PROGRAM_P2).map(d => {
-              const workingDayEx = (PROGRAM_P2[d] || []).filter(e => e.section !== "WARM UP");
+            {Object.keys(config.program).map(d => {
+              const workingDayEx = (config.program[d] || []).filter(e => e.section !== "WARM UP");
               const logged = workingDayEx.filter(e => getVal(d, e.name, "weight") || getType(d, e.name) === "bw").length;
               return (
                 <button key={d} onClick={() => setActiveDay(d)} style={{
@@ -1243,7 +827,7 @@
                   fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
                   whiteSpace: "nowrap", minWidth: 70, transition: UI.ease
                 }}>
-                  <div>{d.toUpperCase()}</div>
+                  <div>{config.dayLabel(d)}</div>
                   <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.62, marginTop: 4 }}>{logged}/{workingDayEx.length}</div>
                 </button>
               );
@@ -1264,7 +848,6 @@
               const color = SECTION_COLORS[section] || "#888";
               const sectionLoggedCount = sectionExercises.filter(e => getVal(activeDay, e.name, "weight") || getType(activeDay, e.name) === "bw").length;
               const isWarmUp = section === "WARM UP";
-              const isWarmUpComplete = isWarmUp && sectionExercises.length > 0 && sectionLoggedCount === sectionExercises.length;
               const collapseKey = `${activeDay}||${section}`;
               const isCollapsed = isWarmUp && (collapsedSections[collapseKey] ?? false);
               return (
@@ -1290,27 +873,32 @@
 
                   {!isCollapsed && sectionExercises.map(ex => {
                     const wVal = getVal(activeDay, ex.name, "weight");
-                    const rpeVal = getRPE(activeDay, ex.name);
+                    const cVal = config.hasNotes ? getVal(activeDay, ex.name, "comment") : "";
+                    const rpeVal = config.hasRPE ? getRPE(activeDay, ex.name) : "";
                     const exType = getType(activeDay, ex.name);
                     const isBW = exType === "bw";
                     const cueKey = `${activeDay}||${ex.name}`;
                     const isExpanded = ex.cue && !collapsedCues.has(cueKey);
-                    const prev = getPrevWeight(weights, activeDay, ex.name, activeWeek);
-                    const prevRpe = getPrevRPE(rpeLog, activeDay, ex.name, activeWeek);
+                    const prev = getPrevWeight(weights, activeDay, ex.name, activeWeek, config.weeks);
+                    const prevRpe = config.hasRPE ? getPrevRPE(rpeLog, activeDay, ex.name, activeWeek, config.weeks) : null;
                     const isLogged = wVal || isBW;
-                    const staticSuggestedKg = ex.suggestedWeight && !isBW && !wVal && (activeWeek === "W1" || activeWeek === "W2")
+
+                    const staticSuggestedKg = config.hasRPE && ex.suggestedWeight && !isBW && !wVal && (activeWeek === "W1" || activeWeek === "W2")
                       ? (activeWeek === "W1" ? ex.suggestedWeight.w1 : ex.suggestedWeight.w2)
                       : null;
-                    const rpeBasedSuggestion = (() => {
+                    const rpeBasedSuggestion = config.hasRPE ? (() => {
                       if (isBW || wVal) return null;
                       if (!prevRpe || prevRpe.rpe === "" || Number(prevRpe.rpe) > 7) return null;
                       if (!prev) return null;
-                      const kg = (parseFloat(prev.weight) + 2.5).toFixed(1).replace(/\.0$/, "");
-                      return kg;
-                    })();
+                      return (parseFloat(prev.weight) + 2.5).toFixed(1).replace(/\.0$/, "");
+                    })() : null;
                     const suggestedKg = rpeBasedSuggestion || staticSuggestedKg;
-                    const prevWeekWeights = WEEKS_P2.slice(0, WEEKS_P2.indexOf(activeWeek)).map(w => weights[`${activeDay}||${ex.name}`]?.[w]?.weight).filter(Boolean).map(parseFloat);
-                    const isPR = wVal && !isBW && prevWeekWeights.length > 0 && parseFloat(wVal) > Math.max(...prevWeekWeights);
+
+                    const prevWeekWeights = config.hasRPE
+                      ? config.weeks.slice(0, config.weeks.indexOf(activeWeek)).map(w => weights[`${activeDay}||${ex.name}`]?.[w]?.weight).filter(Boolean).map(parseFloat)
+                      : [];
+                    const isPR = config.hasRPE && wVal && !isBW && prevWeekWeights.length > 0 && parseFloat(wVal) > Math.max(...prevWeekWeights);
+
                     return (
                       <div key={ex.name} style={{
                         background: isLogged ? UI.surface : "rgba(17,17,17,0.78)",
@@ -1335,7 +923,7 @@
                                     {prev.week}: {prev.weight}kg
                                   </span>
                                 )}
-                                {prevRpe && !isBW && (() => {
+                                {config.hasRPE && prevRpe && !isBW && (() => {
                                   const r = Number(prevRpe.rpe);
                                   const rpeColor = r <= 7 ? UI.success : r <= 8.5 ? UI.warning : UI.accent;
                                   return (
@@ -1344,7 +932,7 @@
                                     </span>
                                   );
                                 })()}
-                                {suggestedKg && (() => {
+                                {config.hasRPE && suggestedKg && (() => {
                                   const isRange = suggestedKg.includes("–");
                                   const isDynamic = !!rpeBasedSuggestion;
                                   return (
@@ -1369,7 +957,7 @@
                               </div>
                             </div>
 
-                            {/* Right: inputs row on top, TypeToggle below */}
+                            {/* Right: weight input (+ RPE for P2), TypeToggle below */}
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                               <div style={{ display: "flex", gap: 6 }}>
                                 <input
@@ -1380,7 +968,7 @@
                                   disabled={isBW}
                                   onChange={e => handleWeight(activeDay, ex.name, e.target.value)}
                                   style={{
-                                    width: 66, background: isBW ? UI.surface : UI.black,
+                                    width: config.hasRPE ? 66 : 72, background: isBW ? UI.surface : UI.black,
                                     border: `1px solid ${wVal && !isBW ? UI.display : UI.borderVisible}`,
                                     borderRadius: 4, padding: "7px 9px",
                                     color: isBW ? UI.disabled : wVal ? UI.display : UI.disabled,
@@ -1389,11 +977,12 @@
                                     letterSpacing: "0.02em"
                                   }}
                                 />
-                                <RPEInput
-                                  value={rpeVal}
-                                  onChange={(v) => handleRPE(activeDay, ex.name, v)}
-                                  prescribed={ex.rpe}
-                                />
+                                {config.hasRPE && (
+                                  <RPEInput
+                                    value={rpeVal}
+                                    onChange={(v) => handleRPE(activeDay, ex.name, v)}
+                                  />
+                                )}
                               </div>
                               <TypeToggle value={exType} onChange={(t) => handleType(activeDay, ex.name, t)} />
                             </div>
@@ -1404,6 +993,19 @@
                               {ex.cue}
                             </div>
                           )}
+
+                          {config.hasNotes && (
+                            <input
+                              type="text" placeholder="notes..."
+                              value={cVal}
+                              onChange={e => handleComment(activeDay, ex.name, e.target.value)}
+                              style={{
+                                width: "100%", marginTop: 10, background: UI.black,
+                                border: `1px solid ${UI.border}`, borderRadius: 4, padding: "7px 9px",
+                                color: UI.secondary, fontSize: 12, outline: "none", fontFamily: UI.sans
+                              }}
+                            />
+                          )}
                         </div>
                       </div>
                     );
@@ -1413,7 +1015,7 @@
             })}
           </div>
 
-          {/* Session Summary Bottom Sheet */}
+          {/* Session Summary Bottom Sheet — P2 only */}
           {showSummary && (
             <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: UI.surface, borderTop: `1px solid ${UI.borderVisible}`, borderRadius: "14px 14px 0 0", padding: "20px 20px 40px", zIndex: 100, animation: "slideUp 0.25s cubic-bezier(0.25,0.1,0.25,1)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
@@ -1454,6 +1056,7 @@
       );
     }
 
+
     // === APP SHELL ===
 
     function App() {
@@ -1467,6 +1070,9 @@
       });
       const [phase1Completed, setPhase1Completed] = useState(() => {
         try { return localStorage.getItem("phase1_completed") === "true"; } catch (_) { return false; }
+      });
+      const [phase2Completed, setPhase2Completed] = useState(() => {
+        try { return localStorage.getItem("phase2_completed") === "true"; } catch (_) { return false; }
       });
 
       // Resolve Supabase session on mount
@@ -1519,10 +1125,10 @@
       };
 
       if (selectedPhase === "phase1" && (cloudUser || phase1Completed)) {
-        return <Phase1Tracker cloudUser={cloudUser} onBack={handleBack} phase1Completed={phase1Completed} setPhase1Completed={setPhase1Completed} />;
+        return <Tracker config={PHASE_CONFIG.phase1} cloudUser={cloudUser} onBack={handleBack} completed={phase1Completed} setCompleted={setPhase1Completed} />;
       }
       if (selectedPhase === "phase2" && phase1Completed) {
-        return <Phase2Tracker cloudUser={cloudUser} onBack={handleBack} />;
+        return <Tracker config={PHASE_CONFIG.phase2} cloudUser={cloudUser} onBack={handleBack} completed={phase2Completed} setCompleted={setPhase2Completed} />;
       }
       return (
         <PhaseLanding

@@ -1,29 +1,32 @@
-Migration Plan: LocalStorage to Supabase
+## Migration: localStorage → Supabase
 
-Overview
-- Objective: Move live data storage to Supabase to enable cross-device access and multi-device editing.
-- Scope: Phase 1 focuses on migrating existing localStorage data to Supabase using email/password auth with a minimal login UX.
+### Status
 
-Phases
-1. Scaffolding
-- Create Supabase project and define table tracker_data as described in architecture.md.
-- Implement a migration script on the frontend that reads localStorage data and upserts into tracker_data with per-week keys.
-- Add a simple login flow to authenticate users (email/password).
+| Phase | Migration | Notes |
+|---|---|---|
+| Phase 1 | **Done** — `migrateLocalToSupabaseIfNeeded` ships in `index.html` | Runs once on first login if Supabase is empty |
+| Phase 2 | No migration needed | Phase 2 data was entered after Supabase was live |
 
-2. Migration Execution
-- On first login, migrate localStorage data for the user to Supabase.
-- After migration, hydrate local UI state from Supabase to support multi-device editing.
-- Keep localStorage as an offline cache during the transition.
+---
 
-3. Validation & Rollout
-- Validate data integrity by comparing local and remote snapshots after migration.
-- Incrementally open access so multiple devices can read/write after login.
-- Document any edge cases (e.g., non-existent data, BW entries).
+### How Phase 1 migration works
 
-Data model notes
-- Each migrated row uses key: `${dayKey}||${week}` with value: { day, exercise, week, weight, comment, type, section }.
-- Upsert uses conflict on (user_id, key) to ensure per-week uniqueness per user.
+On first login, the cloud sync effect checks whether `tracker_data` has any rows for the user. If empty, it calls `migrateLocalToSupabaseIfNeeded(userId)`, which reads `phase1-tracker-v1` and `phase1-types-v1` from localStorage and upserts them into `tracker_data`.
 
-Rollout considerations
-- Sheets export remains available as an export/analysis path; it is not the source of truth.
-- Plan for deduplication and batch IDs (sync_id) in a future iteration to avoid duplicates on repeated exports.
+After migration it re-fetches from Supabase and hydrates local state, so localStorage becomes a cache rather than the source of truth.
+
+---
+
+### Data model (live)
+
+**Table:** `tracker_data` (Phase 1), `tracker_data_p2` (Phase 2)
+
+**Columns:** `id` (uuid pk), `user_id` (uuid, RLS), `day` (text), `exercise` (text), `week` (text), `weight` (text), `comment` (text), `type` (text), `section` (text), `sets` (text), `reps` (text), `updated_at` (timestamp). Phase 2 adds `rpe` (text).
+
+**Upsert conflict key:** `(user_id, day, exercise, week)` — not `(user_id, key)`. Each row is one exercise/week combination, not a composite key string.
+
+---
+
+### Auth
+
+Magic-link only (`sendMagicLink`). No email/password flow exists. On localhost, entering `dev` as the email bypasses auth and sets `phase1_completed = true` for development.
