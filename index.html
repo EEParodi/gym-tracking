@@ -297,7 +297,7 @@
       );
     }
 
-    function RPEInput({ value, onChange }) {
+    function RPEInput({ value, onChange, onFocus, onBlur }) {
       return (
         <input
           type="text"
@@ -310,6 +310,8 @@
             const n = parseFloat(raw);
             if (!isNaN(n) && n >= 0 && n <= 10) onChange(raw);
           }}
+          onFocus={onFocus}
+          onBlur={onBlur}
           style={{
             width: 52, background: UI.black,
             border: `1px solid ${value ? UI.display : UI.borderVisible}`,
@@ -434,6 +436,29 @@
 
     // === TRACKER ===
 
+    function computeNextWorkingDay(config, weights, types) {
+      const days = Object.keys(config.program);
+      const weeks = config.weeks;
+      let lastWi = -1, lastDi = -1;
+      for (let wi = 0; wi < weeks.length; wi++) {
+        for (let di = 0; di < days.length; di++) {
+          const day = days[di];
+          const working = config.program[day].filter(e => e.section !== "WARM UP");
+          if (!working.length) continue;
+          const done = working.every(ex => {
+            const key = `${day}||${ex.name}`;
+            return weights[key]?.[weeks[wi]]?.weight || types[key] === "bw";
+          });
+          if (done) { lastWi = wi; lastDi = di; }
+        }
+      }
+      if (lastWi === -1) return { week: weeks[0], day: days[0] };
+      let nextDi = lastDi + 1, nextWi = lastWi;
+      if (nextDi >= days.length) { nextDi = 0; nextWi++; }
+      if (nextWi >= weeks.length) return { week: weeks[lastWi], day: days[lastDi] };
+      return { week: weeks[nextWi], day: days[nextDi] };
+    }
+
     const PHASE_CONFIG = {
       phase1: {
         label: "PHASE 1",
@@ -473,6 +498,7 @@
       const [syncStatus, setSyncStatus] = useState("idle");
       const [importStatus, setImportStatus] = useState("idle");
       const [summaryDismissed, setSummaryDismissed] = useState(false);
+      const [inputFocused, setInputFocused] = useState(false);
 
       const isPhaseComplete = useCallback(() => {
         const weekKeys = config.weeks.filter(w => !w.includes("Deload"));
@@ -494,13 +520,18 @@
       useEffect(() => {
         try {
           const saved = localStorage.getItem(config.storageKey);
-          if (saved) setWeights(JSON.parse(saved));
+          const loadedWeights = saved ? JSON.parse(saved) : {};
+          if (saved) setWeights(loadedWeights);
           const savedTypes = localStorage.getItem(config.typesKey);
-          if (savedTypes) setTypes(JSON.parse(savedTypes));
+          const loadedTypes = savedTypes ? JSON.parse(savedTypes) : {};
+          if (savedTypes) setTypes(loadedTypes);
           if (config.rpeKey) {
             const savedRpe = localStorage.getItem(config.rpeKey);
             if (savedRpe) setRpeLog(JSON.parse(savedRpe));
           }
+          const { week, day } = computeNextWorkingDay(config, loadedWeights, loadedTypes);
+          setActiveWeek(week);
+          setActiveDay(day);
         } catch (_) {}
       }, []);
 
@@ -520,6 +551,9 @@
               localStorage.setItem(config.typesKey, JSON.stringify(remote.types));
               if (config.rpeKey) localStorage.setItem(config.rpeKey, JSON.stringify(remote.rpeLog || {}));
             } catch (_) {}
+            const { week, day } = computeNextWorkingDay(config, remote.weights, remote.types || {});
+            setActiveWeek(week);
+            setActiveDay(day);
             return;
           }
           if (config.migrateFn) {
@@ -534,6 +568,9 @@
                 localStorage.setItem(config.storageKey, JSON.stringify(refreshed.weights || {}));
                 localStorage.setItem(config.typesKey, JSON.stringify(refreshed.types || {}));
               } catch (_) {}
+              const { week, day } = computeNextWorkingDay(config, refreshed.weights || {}, refreshed.types || {});
+              setActiveWeek(week);
+              setActiveDay(day);
             }
           }
         };
@@ -665,7 +702,7 @@
       const activeWeekLabel = `Week ${activeWeek.match(/\d+/)?.[0] || ""}`.trim();
 
       const allWorkingLogged = workingExercises.length > 0 && loggedCount === workingExercises.length;
-      const showSummary = config.hasRPE && allWorkingLogged && !summaryDismissed;
+      const showSummary = config.hasRPE && allWorkingLogged && !summaryDismissed && !inputFocused;
       const sessionVolume = config.hasRPE ? workingExercises.reduce((total, ex) => {
         const wv = getVal(activeDay, ex.name, "weight");
         if (!wv || getType(activeDay, ex.name) === "bw") return total;
@@ -967,6 +1004,8 @@
                                   value={isBW ? "" : wVal}
                                   disabled={isBW}
                                   onChange={e => handleWeight(activeDay, ex.name, e.target.value)}
+                                  onFocus={() => setInputFocused(true)}
+                                  onBlur={() => setInputFocused(false)}
                                   style={{
                                     width: config.hasRPE ? 66 : 72, background: isBW ? UI.surface : UI.black,
                                     border: `1px solid ${wVal && !isBW ? UI.display : UI.borderVisible}`,
@@ -981,6 +1020,8 @@
                                   <RPEInput
                                     value={rpeVal}
                                     onChange={(v) => handleRPE(activeDay, ex.name, v)}
+                                    onFocus={() => setInputFocused(true)}
+                                    onBlur={() => setInputFocused(false)}
                                   />
                                 )}
                               </div>
