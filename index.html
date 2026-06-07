@@ -383,6 +383,15 @@
               })}
             </div>
 
+            <button onClick={exportProgressMarkdown} style={{
+              marginTop: 16, background: UI.black, border: `1px solid ${UI.borderVisible}`,
+              borderRadius: 4, padding: "10px 12px", color: UI.secondary,
+              fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+              cursor: "pointer", transition: UI.ease,
+            }}>
+              EXPORT PROGRESS (.md)
+            </button>
+
             {!cloudUser && (
               <div style={{ marginTop: 28, padding: 16, background: UI.surface, border: `1px solid ${UI.borderVisible}`, borderRadius: 6 }}>
                 <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary }}>LOGIN REQUIRED FOR CLOUD</div>
@@ -485,6 +494,73 @@
         migrateFn: null,
       },
     };
+
+    function getLastEntry(weights, types, day, exName, weeks) {
+      const key = `${day}||${exName}`;
+      for (let i = weeks.length - 1; i >= 0; i--) {
+        const w = weights[key]?.[weeks[i]]?.weight;
+        if (w) return { week: weeks[i], weight: w };
+      }
+      if (types[key] === "bw") return { week: null, weight: null, bw: true };
+      return null;
+    }
+
+    function generateProgressMarkdown() {
+      const lines = [`# Training Progress`, `_Generated: ${new Date().toISOString().slice(0, 10)}_`];
+      let anyPhase = false;
+
+      for (const id of ["phase1", "phase2"]) {
+        const config = PHASE_CONFIG[id];
+        let weights = {}, types = {}, rpeLog = {};
+        try {
+          weights = JSON.parse(localStorage.getItem(config.storageKey) || "{}");
+          types = JSON.parse(localStorage.getItem(config.typesKey) || "{}");
+          if (config.rpeKey) rpeLog = JSON.parse(localStorage.getItem(config.rpeKey) || "{}");
+        } catch (_) { continue; }
+
+        const status = localStorage.getItem(config.completedKey) === "true" ? "COMPLETE" : "ACTIVE";
+        const phaseLines = [];
+
+        for (const day of Object.keys(config.program)) {
+          const dayLines = [];
+          for (const ex of config.program[day].filter(e => e.section !== "WARM UP")) {
+            const entry = getLastEntry(weights, types, day, ex.name, config.weeks);
+            if (!entry) continue;
+            const parts = [];
+            if (entry.week) parts.push(entry.week);
+            parts.push(entry.bw ? "BW" : `${entry.weight}kg`);
+            if (config.hasRPE) {
+              const rpe = rpeLog[`${day}||${ex.name}`]?.[entry.week];
+              if (rpe) parts.push(`RPE ${rpe}`);
+            }
+            parts.push(`${ex.sets}×${ex.reps}`);
+            dayLines.push(`- **${ex.name}** — ${parts.join(" · ")}`);
+          }
+          if (dayLines.length) {
+            phaseLines.push(``, `### ${day}`, ...dayLines);
+          }
+        }
+
+        if (phaseLines.length) {
+          anyPhase = true;
+          lines.push(``, `## ${config.label} — ${status}`, ...phaseLines);
+        }
+      }
+
+      return anyPhase ? lines.join("\n") : null;
+    }
+
+    function exportProgressMarkdown() {
+      const md = generateProgressMarkdown();
+      if (!md) { alert("No logged progress to export yet."); return; }
+      const blob = new Blob([md], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `training_progress_${new Date().toISOString().slice(0, 10)}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
 
     function Tracker({ config, cloudUser, onBack, completed, setCompleted }) {
       const [activeDay, setActiveDay] = useState(config.defaultDay);
