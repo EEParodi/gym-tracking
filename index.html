@@ -495,16 +495,6 @@
       },
     };
 
-    function getLastEntry(weights, types, day, exName, weeks) {
-      const key = `${day}||${exName}`;
-      for (let i = weeks.length - 1; i >= 0; i--) {
-        const w = weights[key]?.[weeks[i]]?.weight;
-        if (w) return { week: weeks[i], weight: w };
-      }
-      if (types[key] === "bw") return { week: null, weight: null, bw: true };
-      return null;
-    }
-
     function generateProgressMarkdown() {
       const lines = [`# Training Progress`, `_Generated: ${new Date().toISOString().slice(0, 10)}_`];
       let anyPhase = false;
@@ -524,17 +514,24 @@
         for (const day of Object.keys(config.program)) {
           const dayLines = [];
           for (const ex of config.program[day].filter(e => e.section !== "WARM UP")) {
-            const entry = getLastEntry(weights, types, day, ex.name, config.weeks);
-            if (!entry) continue;
-            const parts = [];
-            if (entry.week) parts.push(entry.week);
-            parts.push(entry.bw ? "BW" : `${entry.weight}kg`);
-            if (config.hasRPE) {
-              const rpe = rpeLog[`${day}||${ex.name}`]?.[entry.week];
-              if (rpe) parts.push(`RPE ${rpe}`);
+            const key = `${day}||${ex.name}`;
+            const setsReps = `${ex.sets}×${ex.reps}`;
+            const weekLines = [];
+            for (const wk of config.weeks) {
+              const w = weights[key]?.[wk]?.weight;
+              if (!w) continue;
+              const parts = [wk, `${w}kg`];
+              if (config.hasRPE) {
+                const rpe = rpeLog[key]?.[wk];
+                if (rpe) parts.push(`RPE ${rpe}`);
+              }
+              weekLines.push(`  - ${parts.join(" · ")}`);
             }
-            parts.push(`${ex.sets}×${ex.reps}`);
-            dayLines.push(`- **${ex.name}** — ${parts.join(" · ")}`);
+            if (weekLines.length) {
+              dayLines.push(`- **${ex.name}** (${setsReps})`, ...weekLines);
+            } else if (types[key] === "bw") {
+              dayLines.push(`- **${ex.name}** (${setsReps}) — BW`);
+            }
           }
           if (dayLines.length) {
             phaseLines.push(``, `### ${day}`, ...dayLines);
