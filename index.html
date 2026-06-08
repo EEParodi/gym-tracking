@@ -52,7 +52,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect, useCallback } = React;
+    const { useState, useEffect, useCallback, useMemo } = React;
 
     // === PROGRAM DATA ===
 
@@ -212,6 +212,8 @@
     const STORAGE_KEY_P2   = "phase2-tracker-v1";
     const TYPES_KEY_P2     = "phase2-types-v1";
     const RPE_KEY_P2       = "phase2-rpe-v1";
+    const FAVOURITES_KEY_P2 = "phase2-favourites-v1";
+    const REPS_KEY_P2      = "phase2-reps-v1";
     const LAST_PHASE_KEY   = "phase-tracker-last-phase";
 
     const PHASES = [
@@ -297,12 +299,12 @@
       );
     }
 
-    function RPEInput({ value, onChange, onFocus, onBlur }) {
+    function RPEInput({ value, onChange, onFocus, onBlur, placeholder = "RPE" }) {
       return (
         <input
           type="text"
           inputMode="decimal"
-          placeholder="RPE"
+          placeholder={placeholder}
           value={value}
           onChange={e => {
             const raw = e.target.value;
@@ -325,7 +327,7 @@
       );
     }
 
-    function PhaseLanding({ onSelect, cloudUser, authEmail, setAuthEmail, authStatus, onLogin, phase1Completed }) {
+    function PhaseLanding({ onSelect, cloudUser, authEmail, setAuthEmail, authStatus, onLogin, phase1Completed, onInsights }) {
       return (
         <div style={{ minHeight: "100vh", padding: "28px 16px 64px", color: UI.primary, fontFamily: UI.sans }}>
           <div style={{ maxWidth: 720, margin: "0 auto" }}>
@@ -383,14 +385,24 @@
               })}
             </div>
 
-            <button onClick={exportProgressMarkdown} style={{
-              marginTop: 16, background: UI.black, border: `1px solid ${UI.borderVisible}`,
-              borderRadius: 4, padding: "10px 12px", color: UI.secondary,
-              fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
-              cursor: "pointer", transition: UI.ease,
-            }}>
-              EXPORT PROGRESS (.md)
-            </button>
+            <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={onInsights} style={{
+                background: UI.black, border: `1px solid ${UI.accent}`,
+                borderRadius: 4, padding: "10px 12px", color: UI.accent,
+                fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+                cursor: "pointer", transition: UI.ease,
+              }}>
+                INSIGHTS →
+              </button>
+              <button onClick={exportProgressMarkdown} style={{
+                background: UI.black, border: `1px solid ${UI.borderVisible}`,
+                borderRadius: 4, padding: "10px 12px", color: UI.secondary,
+                fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em",
+                cursor: "pointer", transition: UI.ease,
+              }}>
+                EXPORT PROGRESS (.md)
+              </button>
+            </div>
 
             {!cloudUser && (
               <div style={{ marginTop: 28, padding: 16, background: UI.surface, border: `1px solid ${UI.borderVisible}`, borderRadius: 6 }}>
@@ -575,6 +587,7 @@
       const [importStatus, setImportStatus] = useState("idle");
       const [summaryDismissed, setSummaryDismissed] = useState(false);
       const [inputFocused, setInputFocused] = useState(false);
+      const [favourites, setFavourites] = useState({});
 
       const isPhaseComplete = useCallback(() => {
         const weekKeys = config.weeks.filter(w => !w.includes("Deload"));
@@ -605,11 +618,23 @@
             const savedRpe = localStorage.getItem(config.rpeKey);
             if (savedRpe) setRpeLog(JSON.parse(savedRpe));
           }
+          if (config.hasRPE) {
+            const savedFav = localStorage.getItem(FAVOURITES_KEY_P2);
+            if (savedFav) setFavourites(JSON.parse(savedFav));
+          }
           const { week, day } = computeNextWorkingDay(config, loadedWeights, loadedTypes);
           setActiveWeek(week);
           setActiveDay(day);
         } catch (_) {}
       }, []);
+
+      const toggleFavourite = (day, exercise) => {
+        const key = `${day}||${exercise}`;
+        const updated = { ...favourites };
+        if (updated[key]) delete updated[key]; else updated[key] = true;
+        setFavourites(updated);
+        try { localStorage.setItem(FAVOURITES_KEY_P2, JSON.stringify(updated)); } catch (_) {}
+      };
 
       useEffect(() => {
         if (!cloudUser?.id || !window.supabase?.[config.hydrateFn]) return;
@@ -999,13 +1024,15 @@
                     const staticSuggestedKg = config.hasRPE && ex.suggestedWeight && !isBW && !wVal && (activeWeek === "W1" || activeWeek === "W2")
                       ? (activeWeek === "W1" ? ex.suggestedWeight.w1 : ex.suggestedWeight.w2)
                       : null;
-                    const rpeBasedSuggestion = config.hasRPE ? (() => {
+                    const rpeSuggestion = config.hasRPE ? (() => {
                       if (isBW || wVal) return null;
-                      if (!prevRpe || prevRpe.rpe === "" || Number(prevRpe.rpe) > 7) return null;
-                      if (!prev) return null;
-                      return (parseFloat(prev.weight) + 2.5).toFixed(1).replace(/\.0$/, "");
+                      if (!prevRpe || prevRpe.rpe === "" || !prev) return null;
+                      const r = Number(prevRpe.rpe);
+                      if (r <= 7) return { kg: (parseFloat(prev.weight) + 2.5).toFixed(1).replace(/\.0$/, ""), hold: false };
+                      if (r >= 9.5) return { kg: String(prev.weight), hold: true };
+                      return null;
                     })() : null;
-                    const suggestedKg = rpeBasedSuggestion || staticSuggestedKg;
+                    const suggestedKg = rpeSuggestion ? rpeSuggestion.kg : staticSuggestedKg;
 
                     const prevWeekWeights = config.hasRPE
                       ? config.weeks.slice(0, config.weeks.indexOf(activeWeek)).map(w => weights[`${activeDay}||${ex.name}`]?.[w]?.weight).filter(Boolean).map(parseFloat)
@@ -1027,7 +1054,21 @@
                               onClick={() => { if (!ex.cue) return; setCollapsedCues(prev => { const s = new Set(prev); s.has(cueKey) ? s.delete(cueKey) : s.add(cueKey); return s; }); }}
                               style={{ flex: 1, cursor: ex.cue ? "pointer" : "default" }}
                             >
-                              <div style={{ fontSize: 15, fontWeight: 500, color: isLogged ? UI.display : UI.primary, lineHeight: 1.25, letterSpacing: "-0.01em" }}>{ex.name}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                {config.hasRPE && ex.section !== "WARM UP" && (() => {
+                                  const isFav = !!favourites[`${activeDay}||${ex.name}`];
+                                  return (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); toggleFavourite(activeDay, ex.name); }}
+                                      title={isFav ? "Remove from insights" : "Track on insights"}
+                                      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 15, lineHeight: 1, color: isFav ? UI.warning : UI.disabled }}
+                                    >
+                                      {isFav ? "★" : "☆"}
+                                    </button>
+                                  );
+                                })()}
+                                <div style={{ fontSize: 15, fontWeight: 500, color: isLogged ? UI.display : UI.primary, lineHeight: 1.25, letterSpacing: "-0.01em" }}>{ex.name}</div>
+                              </div>
                               <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
                                 <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>{ex.sets}x{ex.reps}</span>
                                 <span style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px" }}>RPE {ex.rpe}</span>
@@ -1047,13 +1088,18 @@
                                 })()}
                                 {config.hasRPE && suggestedKg && (() => {
                                   const isRange = suggestedKg.includes("–");
-                                  const isDynamic = !!rpeBasedSuggestion;
+                                  const isHold = !!(rpeSuggestion && rpeSuggestion.hold);
+                                  const isUp = !!(rpeSuggestion && !rpeSuggestion.hold);
+                                  const accentColor = isUp ? UI.success : UI.warning;
+                                  const bg = isUp ? "rgba(74,158,92,0.08)" : "rgba(212,168,67,0.08)";
+                                  const borderC = isUp ? "rgba(74,158,92,0.4)" : "rgba(212,168,67,0.4)";
+                                  const label = isHold ? `= ${suggestedKg}kg HOLD` : `↑ ${suggestedKg}kg${isUp ? " (RPE)" : ""}`;
                                   return (
                                     <span
                                       onClick={isRange ? (e) => e.stopPropagation() : (e) => { e.stopPropagation(); handleWeight(activeDay, ex.name, suggestedKg); }}
-                                      style={{ fontFamily: UI.mono, fontSize: 10, color: isDynamic ? UI.success : UI.warning, background: isDynamic ? "rgba(74,158,92,0.08)" : "rgba(212,168,67,0.08)", border: `1px dashed ${isDynamic ? "rgba(74,158,92,0.4)" : "rgba(212,168,67,0.4)"}`, borderRadius: 3, padding: "3px 6px", cursor: isRange ? "default" : "pointer" }}
+                                      style={{ fontFamily: UI.mono, fontSize: 10, color: accentColor, background: bg, border: `1px dashed ${borderC}`, borderRadius: 3, padding: "3px 6px", cursor: isRange ? "default" : "pointer" }}
                                     >
-                                      ↑ {suggestedKg}kg{isDynamic ? " (RPE)" : ""}
+                                      {label}
                                     </span>
                                   );
                                 })()}
@@ -1076,7 +1122,7 @@
                                 <input
                                   type="text"
                                   inputMode="decimal"
-                                  placeholder={isBW ? "BW" : "kg"}
+                                  placeholder={isBW ? "BW" : (prev ? String(prev.weight) : "kg")}
                                   value={isBW ? "" : wVal}
                                   disabled={isBW}
                                   onChange={e => handleWeight(activeDay, ex.name, e.target.value)}
@@ -1098,6 +1144,7 @@
                                     onChange={(v) => handleRPE(activeDay, ex.name, v)}
                                     onFocus={() => setInputFocused(true)}
                                     onBlur={() => setInputFocused(false)}
+                                    placeholder={prevRpe ? String(prevRpe.rpe) : "RPE"}
                                   />
                                 )}
                               </div>
@@ -1176,6 +1223,220 @@
 
     // === APP SHELL ===
 
+    // === INSIGHTS ===
+
+    // Parse a prescribed reps string into a usable rep count + per-side flag.
+    // Time-based (holds, "45s") and distance-based (carries, "20–30m") are not rep-counted.
+    function parseRepsMeta(repsStr) {
+      const s = String(repsStr || "").toLowerCase().trim();
+      const perSide = s.includes("/side") || s.includes("/leg") || s.includes("/arm");
+      if (/^\d+(\s*[–-]\s*\d+)?\s*s/.test(s)) return { reps: null, perSide };
+      if (/\d\s*m(\b|\/)/.test(s)) return { reps: null, perSide };
+      if (s.includes("burn") || s.includes("quality") || s.includes("—")) return { reps: null, perSide };
+      const m = s.match(/(\d+(?:\.\d+)?)(?:\s*[–-]\s*(\d+(?:\.\d+)?))?/);
+      if (!m) return { reps: null, perSide };
+      const top = m[2] ? parseFloat(m[2]) : parseFloat(m[1]); // top of a range
+      return { reps: isNaN(top) ? null : top, perSide };
+    }
+
+    const epley = (w, reps) => w * (1 + reps / 30);
+    const isDeloadWeek = (week) => week.includes("Deload");
+
+    function MiniChart({ points }) {
+      // points: [{ label, value, deload }] — value may be null (skip)
+      const W = 300, H = 76, padX = 8, padY = 12;
+      const vals = points.filter(p => p.value != null).map(p => p.value);
+      if (vals.length < 2) {
+        return <div style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, padding: "8px 0" }}>Log 2+ weeks to see a trend.</div>;
+      }
+      const min = Math.min(...vals), max = Math.max(...vals);
+      const span = max - min || 1;
+      const n = points.length;
+      const x = (i) => padX + (n === 1 ? 0 : (i / (n - 1)) * (W - 2 * padX));
+      const y = (v) => padY + (1 - (v - min) / span) * (H - 2 * padY);
+      const linePts = points
+        .map((p, i) => ({ p, i }))
+        .filter(({ p }) => p.value != null && !p.deload)
+        .map(({ p, i }) => `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`)
+        .join(" ");
+      return (
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block" }}>
+          {linePts && <polyline points={linePts} fill="none" stroke={UI.accent} strokeWidth="1.5" />}
+          {points.map((p, i) => p.value == null ? null : (
+            <circle key={i} cx={x(i)} cy={y(p.value)} r="3" fill={p.deload ? UI.warning : UI.accent} />
+          ))}
+        </svg>
+      );
+    }
+
+    function Insights({ onBack }) {
+      const [reps, setReps] = useState({});
+      const [data, setData] = useState({ weights: {}, rpe: {}, types: {}, favourites: {} });
+      const [wf, setWf] = useState({ weight: "", reps: "", sets: "1" });
+
+      useEffect(() => {
+        const read = (k) => { try { return JSON.parse(localStorage.getItem(k) || "{}"); } catch (_) { return {}; } };
+        setData({
+          weights: read(STORAGE_KEY_P2),
+          rpe: read(RPE_KEY_P2),
+          types: read(TYPES_KEY_P2),
+          favourites: read(FAVOURITES_KEY_P2),
+        });
+        setReps(read(REPS_KEY_P2));
+      }, []);
+
+      const setRepFor = (key, week, value) => {
+        const updated = { ...reps, [key]: { ...(reps[key] || {}), [week]: value } };
+        setReps(updated);
+        try { localStorage.setItem(REPS_KEY_P2, JSON.stringify(updated)); } catch (_) {}
+      };
+
+      const allExercises = useMemo(() => Object.entries(PROGRAM_P2).flatMap(([day, list]) =>
+        list.filter(e => e.section !== "WARM UP").map(e => ({ ...e, day, key: `${day}||${e.name}` }))
+      ), []);
+
+      const favKeys = Object.keys(data.favourites).filter(k => data.favourites[k]);
+      const hasLogged = (key) => data.weights[key] && Object.values(data.weights[key]).some(w => w?.weight);
+      const shown = favKeys.length
+        ? allExercises.filter(e => data.favourites[e.key])
+        : allExercises.filter(e => hasLogged(e.key));
+
+      const wfE1RM = (() => {
+        const w = parseFloat(wf.weight), r = parseFloat(wf.reps);
+        return (w > 0 && r > 0) ? epley(w, r) : null;
+      })();
+      const wfTonnage = (() => {
+        const w = parseFloat(wf.weight), r = parseFloat(wf.reps), s = parseFloat(wf.sets);
+        return (w > 0 && r > 0 && s > 0) ? w * r * s : null;
+      })();
+
+      const cardBox = { background: UI.surface, border: `1px solid ${UI.borderVisible}`, borderRadius: 6, padding: "14px", marginBottom: 12 };
+      const stat = (label, value, color) => (
+        <div>
+          <div style={{ fontFamily: UI.mono, fontSize: 9, letterSpacing: "0.1em", color: UI.disabled }}>{label}</div>
+          <div style={{ fontFamily: UI.mono, fontSize: 17, fontWeight: 700, color: color || UI.display, marginTop: 3 }}>{value}</div>
+        </div>
+      );
+
+      return (
+        <div style={{ fontFamily: UI.sans, minHeight: "100vh", color: UI.primary, paddingBottom: 80 }}>
+          <div style={{ background: "rgba(0,0,0,0.94)", borderBottom: `1px solid ${UI.border}`, padding: "20px 16px 18px", position: "sticky", top: 0, zIndex: 10 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                <div style={{ fontFamily: UI.displayFont, fontSize: 44, lineHeight: 0.9, letterSpacing: "-0.06em", color: UI.display }}>INSIGHTS</div>
+                <div style={{ paddingTop: 6, fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: UI.disabled }}>PHASE 2</div>
+              </div>
+              <button onClick={onBack} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer", whiteSpace: "nowrap" }}>
+                ← HOME
+              </button>
+            </div>
+          </div>
+
+          <div style={{ padding: "16px", maxWidth: 720, margin: "0 auto" }}>
+
+            {/* What-if calculator */}
+            <div style={cardBox}>
+              <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary, marginBottom: 12 }}>WHAT-IF CALCULATOR</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+                {[["weight", "kg"], ["reps", "reps"], ["sets", "sets"]].map(([field, ph]) => (
+                  <div key={field}>
+                    <div style={{ fontFamily: UI.mono, fontSize: 9, letterSpacing: "0.1em", color: UI.disabled, marginBottom: 4 }}>{ph.toUpperCase()}</div>
+                    <input
+                      type="text" inputMode="decimal" placeholder={ph}
+                      value={wf[field]}
+                      onChange={e => setWf(prev => ({ ...prev, [field]: e.target.value }))}
+                      style={{ width: 70, background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 9px", color: UI.display, fontSize: 13, fontFamily: UI.mono, fontWeight: 700, outline: "none", textAlign: "center" }}
+                    />
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 18, marginLeft: "auto" }}>
+                  {stat("EST 1RM", wfE1RM != null ? `${wfE1RM.toFixed(1)}kg` : "—", UI.accent)}
+                  {stat("VOLUME", wfTonnage != null ? `${Math.round(wfTonnage)}kg` : "—")}
+                </div>
+              </div>
+            </div>
+
+            {!favKeys.length && (
+              <div style={{ fontFamily: UI.mono, fontSize: 11, lineHeight: 1.6, color: UI.disabled, padding: "0 2px 14px" }}>
+                Tap ☆ on an exercise in the tracker to pin it here. Showing all logged exercises for now.
+              </div>
+            )}
+
+            {shown.length === 0 && (
+              <div style={{ fontFamily: UI.mono, fontSize: 12, color: UI.disabled, padding: "24px 0", textAlign: "center" }}>
+                No logged Phase 2 data yet.
+              </div>
+            )}
+
+            {shown.map(ex => {
+              const meta = parseRepsMeta(ex.reps);
+              const sets = parseInt(ex.sets) || 0;
+              const sideMult = meta.perSide ? 2 : 1;
+              const isBW = data.types[ex.key] === "bw";
+              const weekRows = WEEKS_P2.map(week => {
+                const weight = parseFloat(data.weights[ex.key]?.[week]?.weight);
+                const repVal = reps[ex.key]?.[week];
+                const repsUsed = (repVal !== undefined && repVal !== "") ? parseFloat(repVal) : meta.reps;
+                const hasW = !isNaN(weight) && weight > 0;
+                const e1 = (hasW && repsUsed > 0) ? epley(weight, repsUsed) : null;
+                const ton = (hasW && repsUsed > 0) ? weight * repsUsed * sets * sideMult : null;
+                return { week, weight: hasW ? weight : null, repVal, repsUsed, e1, ton, deload: isDeloadWeek(week) };
+              });
+              const loggedRows = weekRows.filter(r => r.weight != null);
+              if (!loggedRows.length) return null;
+              const e1Points = weekRows.map(r => ({ label: r.week, value: r.e1, deload: r.deload }));
+              const bestE1 = Math.max(...loggedRows.filter(r => !r.deload && r.e1 != null).map(r => r.e1), 0);
+              const lastTon = [...loggedRows].reverse().find(r => r.ton != null);
+
+              return (
+                <div key={ex.key} style={cardBox}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: UI.display, letterSpacing: "-0.01em" }}>{ex.name}</div>
+                    <div style={{ fontFamily: UI.mono, fontSize: 9, letterSpacing: "0.08em", color: UI.disabled }}>{ex.day.toUpperCase()}</div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 24, margin: "12px 0 4px" }}>
+                    {stat("BEST e1RM", bestE1 > 0 ? `${bestE1.toFixed(1)}kg` : "—", UI.accent)}
+                    {stat("LAST VOLUME", lastTon ? `${Math.round(lastTon.ton)}kg` : "—")}
+                  </div>
+
+                  {meta.reps == null && !Object.keys(reps[ex.key] || {}).length ? (
+                    <div style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, padding: "8px 0" }}>
+                      Time/distance-based — enter reps below to estimate 1RM &amp; volume.
+                    </div>
+                  ) : (
+                    <MiniChart points={e1Points} />
+                  )}
+
+                  {/* Per-week reps entry */}
+                  <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {loggedRows.map(r => (
+                      <div key={r.week} style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: UI.mono, fontSize: 11 }}>
+                        <span style={{ width: 64, color: r.deload ? UI.warning : UI.secondary }}>{r.week.replace(" (Deload)", " DL")}</span>
+                        <span style={{ width: 56, color: UI.display }}>{isBW ? "BW" : `${r.weight}kg`}</span>
+                        <span style={{ color: UI.disabled }}>×</span>
+                        <input
+                          type="text" inputMode="numeric"
+                          placeholder={meta.reps != null ? String(meta.reps) : "reps"}
+                          value={r.repVal ?? ""}
+                          onChange={e => setRepFor(ex.key, r.week, e.target.value)}
+                          style={{ width: 48, background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "5px 6px", color: UI.display, fontSize: 11, fontFamily: UI.mono, fontWeight: 700, outline: "none", textAlign: "center" }}
+                        />
+                        <span style={{ color: UI.disabled, marginLeft: "auto" }}>
+                          {r.e1 != null ? `e1RM ${r.e1.toFixed(1)}` : "—"}
+                          {r.ton != null ? `  ·  ${Math.round(r.ton)}kg vol` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     function App() {
       const [cloudUser, setCloudUser] = useState(null);
       const [authEmail, setAuthEmail] = useState(() => {
@@ -1191,6 +1452,7 @@
       const [phase2Completed, setPhase2Completed] = useState(() => {
         try { return localStorage.getItem("phase2_completed") === "true"; } catch (_) { return false; }
       });
+      const [showInsights, setShowInsights] = useState(false);
 
       // Resolve Supabase session on mount
       useEffect(() => {
@@ -1241,6 +1503,9 @@
         setTimeout(() => setAuthStatus("idle"), 4000);
       };
 
+      if (showInsights) {
+        return <Insights onBack={() => setShowInsights(false)} />;
+      }
       if (selectedPhase === "phase1" && (cloudUser || phase1Completed)) {
         return <Tracker config={PHASE_CONFIG.phase1} cloudUser={cloudUser} onBack={handleBack} completed={phase1Completed} setCompleted={setPhase1Completed} />;
       }
@@ -1256,6 +1521,7 @@
           authStatus={authStatus}
           onLogin={sendLoginLink}
           phase1Completed={phase1Completed}
+          onInsights={() => setShowInsights(true)}
         />
       );
     }
