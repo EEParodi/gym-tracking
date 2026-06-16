@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
   <script>
     // Expose Supabase credentials for the ES module wrapper (Phase 2 migration path)
     window.SUPABASE_URL = "https://gehcmkgtdisltlmljmhm.supabase.co";
@@ -507,16 +507,6 @@
       },
     };
 
-    function getLastEntry(weights, types, day, exName, weeks) {
-      const key = `${day}||${exName}`;
-      for (let i = weeks.length - 1; i >= 0; i--) {
-        const w = weights[key]?.[weeks[i]]?.weight;
-        if (w) return { week: weeks[i], weight: w };
-      }
-      if (types[key] === "bw") return { week: null, weight: null, bw: true };
-      return null;
-    }
-
     function generateProgressMarkdown() {
       const lines = [`# Training Progress`, `_Generated: ${new Date().toISOString().slice(0, 10)}_`];
       let anyPhase = false;
@@ -535,18 +525,32 @@
 
         for (const day of Object.keys(config.program)) {
           const dayLines = [];
-          for (const ex of config.program[day].filter(e => e.section !== "WARM UP")) {
-            const entry = getLastEntry(weights, types, day, ex.name, config.weeks);
-            if (!entry) continue;
-            const parts = [];
-            if (entry.week) parts.push(entry.week);
-            parts.push(entry.bw ? "BW" : `${entry.weight}kg`);
-            if (config.hasRPE) {
-              const rpe = rpeLog[`${day}||${ex.name}`]?.[entry.week];
-              if (rpe) parts.push(`RPE ${rpe}`);
+          const warmupExs = config.program[day].filter(e => e.section === "WARM UP");
+          if (warmupExs.length) {
+            dayLines.push(`**Warm-up**`);
+            for (const ex of warmupExs) {
+              dayLines.push(`- ${ex.name} (${ex.sets}×${ex.reps})`);
             }
-            parts.push(`${ex.sets}×${ex.reps}`);
-            dayLines.push(`- **${ex.name}** — ${parts.join(" · ")}`);
+          }
+          for (const ex of config.program[day].filter(e => e.section !== "WARM UP")) {
+            const key = `${day}||${ex.name}`;
+            const setsReps = `${ex.sets}×${ex.reps}`;
+            const weekLines = [];
+            for (const wk of config.weeks) {
+              const w = weights[key]?.[wk]?.weight;
+              if (!w) continue;
+              const parts = [wk, `${w}kg`];
+              if (config.hasRPE) {
+                const rpe = rpeLog[key]?.[wk];
+                if (rpe) parts.push(`RPE ${rpe}`);
+              }
+              weekLines.push(`  - ${parts.join(" · ")}`);
+            }
+            if (weekLines.length) {
+              dayLines.push(`- **${ex.name}** (${setsReps})`, ...weekLines);
+            } else if (types[key] === "bw") {
+              dayLines.push(`- **${ex.name}** (${setsReps}) — BW`);
+            }
           }
           if (dayLines.length) {
             phaseLines.push(``, `### ${day}`, ...dayLines);
