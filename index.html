@@ -253,6 +253,22 @@
       return null;
     }
 
+    function getBestWeight(weights, day, exercise, currentWeek, weeks) {
+      const weekIdx = weeks.indexOf(currentWeek);
+      let best = null;
+      for (let i = 0; i < weekIdx; i++) {
+        if (weeks[i].includes("Deload")) continue;
+        const w = parseFloat(weights[`${day}||${exercise}`]?.[weeks[i]]?.weight);
+        if (!isNaN(w) && (best === null || w > best)) best = w;
+      }
+      return best;
+    }
+
+    function calcDeloadWeight(prWeight) {
+      const target = prWeight * 0.55;
+      return Math.round(target / 2.5) * 2.5;
+    }
+
     function getPrevRPE(rpeLog, day, exercise, currentWeek, weeks = WEEKS) {
       const weekIdx = weeks.indexOf(currentWeek);
       if (weekIdx <= 0) return null;
@@ -1025,6 +1041,7 @@
                     const prevRpe = config.hasRPE ? getPrevRPE(rpeLog, activeDay, ex.name, activeWeek, config.weeks) : null;
                     const isLogged = wVal || isBW;
 
+                    const isDeloadWeekActive = activeWeek.includes("Deload");
                     const staticSuggestedKg = config.hasRPE && ex.suggestedWeight && !isBW && !wVal && (activeWeek === "W1" || activeWeek === "W2")
                       ? (activeWeek === "W1" ? ex.suggestedWeight.w1 : ex.suggestedWeight.w2)
                       : null;
@@ -1036,7 +1053,11 @@
                       if (r >= 9.5) return { kg: String(prev.weight), hold: true };
                       return null;
                     })() : null;
-                    const suggestedKg = rpeSuggestion ? rpeSuggestion.kg : staticSuggestedKg;
+                    const suggestedKg = !isDeloadWeekActive ? (rpeSuggestion ? rpeSuggestion.kg : staticSuggestedKg) : null;
+                    const deloadBest = isDeloadWeekActive && !isBW && !wVal
+                      ? getBestWeight(weights, activeDay, ex.name, activeWeek, config.weeks)
+                      : null;
+                    const deloadSuggestedKg = deloadBest ? calcDeloadWeight(deloadBest) : null;
 
                     const prevWeekWeights = config.hasRPE
                       ? config.weeks.slice(0, config.weeks.indexOf(activeWeek)).map(w => weights[`${activeDay}||${ex.name}`]?.[w]?.weight).filter(Boolean).map(parseFloat)
@@ -1107,6 +1128,14 @@
                                     </span>
                                   );
                                 })()}
+                                {deloadSuggestedKg && (
+                                  <span
+                                    onClick={(e) => { e.stopPropagation(); handleWeight(activeDay, ex.name, String(deloadSuggestedKg)); }}
+                                    style={{ fontFamily: UI.mono, fontSize: 10, color: UI.warning, background: "rgba(212,168,67,0.08)", border: `1px dashed rgba(212,168,67,0.4)`, borderRadius: 3, padding: "3px 6px", cursor: "pointer" }}
+                                  >
+                                    ↓ {deloadSuggestedKg}kg DELOAD
+                                  </span>
+                                )}
                                 {isPR && (
                                   <span style={{ fontFamily: UI.mono, fontSize: 10, fontWeight: 700, color: UI.warning, background: "rgba(212,168,67,0.12)", border: `1px solid rgba(212,168,67,0.5)`, borderRadius: 3, padding: "3px 6px" }}>
                                     PR
