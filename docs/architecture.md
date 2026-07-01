@@ -1,5 +1,7 @@
 ## Architecture
 
+> See [`adr/`](adr/) for the *why* behind these decisions: [0001 single-file monolith](adr/0001-single-file-monolith.md), [0002 deload 55% rule](adr/0002-deload-55-percent-rule.md), [0003 localStorage+Supabase dual storage](adr/0003-localstorage-supabase-dual-storage.md), [0004 magic-link-only auth](adr/0004-magic-link-only-auth.md).
+
 **Frontend:** Single file — `index.html`. No bundler, no `package.json`. React 18 via CDN unpkg, Babel standalone for in-browser JSX, inline styles only.
 
 **Auth:** Magic-link via Supabase (`sendMagicLink`). No email/password. On localhost, typing `dev` in the email field bypasses auth for development.
