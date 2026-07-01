@@ -14,6 +14,7 @@
     window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdlaGNta2d0ZGlzbHRsbWxqbWhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NzQxMzgsImV4cCI6MjA5MjU1MDEzOH0.RK61twAyiUYjE5Wzgx2M9GwQ_gT2B10IkXRIB7qPG9g";
   </script>
   <script type="module" src="./frontend/supabaseClient.mjs"></script>
+  <script type="module" src="./frontend/businessLogic.mjs"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -242,43 +243,45 @@
     };
 
     // === HELPERS ===
+    // Pure business-logic functions live in frontend/businessLogic.mjs (loaded as a module
+    // above, bridged onto window.BusinessLogic) so they can be unit tested with node --test.
+    // These wrappers just delegate, keeping call sites in this file unchanged.
 
+    /**
+     * Most recent previous week's weight for an exercise — never the all-time best.
+     * W1 returns null; W2 returns W1 (if logged); W3 returns the most recent of W1/W2 with data, etc.
+     * @returns {{weight: string, week: string} | null}
+     */
     function getPrevWeight(weights, day, exercise, currentWeek, weeks = WEEKS) {
-      const weekIdx = weeks.indexOf(currentWeek);
-      if (weekIdx <= 0) return null;
-      for (let i = weekIdx - 1; i >= 0; i--) {
-        const w = weights[`${day}||${exercise}`]?.[weeks[i]]?.weight;
-        if (w) return { weight: w, week: weeks[i] };
-      }
-      return null;
+      return window.BusinessLogic.getPrevWeight(weights, day, exercise, currentWeek, weeks);
     }
 
+    /**
+     * All-time best (heaviest) logged weight for an exercise before currentWeek, excluding deload weeks.
+     * Used as the PR basis for deload suggestions — see calcDeloadWeight and docs/adr/0002.
+     * @returns {number | null}
+     */
     function getBestWeight(weights, day, exercise, currentWeek, weeks) {
-      const weekIdx = weeks.indexOf(currentWeek);
-      let best = null;
-      for (let i = 0; i < weekIdx; i++) {
-        if (weeks[i].includes("Deload")) continue;
-        const w = parseFloat(weights[`${day}||${exercise}`]?.[weeks[i]]?.weight);
-        if (!isNaN(w) && (best === null || w > best)) best = w;
-      }
-      return best;
+      return window.BusinessLogic.getBestWeight(weights, day, exercise, currentWeek, weeks);
     }
 
+    /**
+     * Deload week suggestion: 55% of PR, rounded to the nearest 2.5kg plate increment.
+     * Business rule — see docs/adr/0002-deload-55-percent-rule.md.
+     * @param {number} prWeight - all-time best weight, from getBestWeight()
+     * @returns {number}
+     */
     function calcDeloadWeight(prWeight) {
-      const target = prWeight * 0.55;
-      return Math.round(target / 2.5) * 2.5;
+      return window.BusinessLogic.calcDeloadWeight(prWeight);
     }
 
+    /**
+     * Most recent previous week's logged RPE for an exercise (mirrors getPrevWeight).
+     * @returns {{rpe: string, week: string} | null}
+     */
     function getPrevRPE(rpeLog, day, exercise, currentWeek, weeks = WEEKS) {
-      const weekIdx = weeks.indexOf(currentWeek);
-      if (weekIdx <= 0) return null;
-      for (let i = weekIdx - 1; i >= 0; i--) {
-        const r = rpeLog[`${day}||${exercise}`]?.[weeks[i]];
-        if (r !== undefined && r !== "") return { rpe: r, week: weeks[i] };
-      }
-      return null;
+      return window.BusinessLogic.getPrevRPE(rpeLog, day, exercise, currentWeek, weeks);
     }
-
     const TYPE_OPTIONS = [
       { id: "bb",  label: "BB",  title: "Barbell" },
       { id: "db",  label: "DB",  title: "Dumbbell" },
@@ -609,6 +612,8 @@
       const [inputFocused, setInputFocused] = useState(false);
       const [favourites, setFavourites] = useState({});
 
+      // Phase is complete once every non-deload week of every working exercise (excluding the
+      // optional day) is logged — a BW-type exercise counts as logged even with no weight value.
       const isPhaseComplete = useCallback(() => {
         const weekKeys = config.weeks.filter(w => !w.includes("Deload"));
         let total = 0, logged = 0;
@@ -824,11 +829,11 @@
 
       const allWorkingLogged = workingExercises.length > 0 && loggedCount === workingExercises.length;
       const showSummary = config.hasRPE && allWorkingLogged && !summaryDismissed && !inputFocused;
-      const sessionVolume = config.hasRPE ? workingExercises.reduce((total, ex) => {
-        const wv = getVal(activeDay, ex.name, "weight");
-        if (!wv || getType(activeDay, ex.name) === "bw") return total;
-        return total + (parseInt(ex.sets) || 0) * (parseInt(ex.reps) || 0) * parseFloat(wv);
-      }, 0) : 0;
+      // Session volume = sets * reps * weight, summed across working exercises logged this session
+      // (BW-type and unweighted exercises don't contribute). Phase 2 only (config.hasRPE).
+      const sessionVolume = config.hasRPE
+        ? window.BusinessLogic.calcSessionVolume(workingExercises, getVal, getType, activeDay)
+        : 0;
       const sessionRPEs = config.hasRPE
         ? workingExercises.map(ex => rpeLog[`${activeDay}||${ex.name}`]?.[activeWeek]).filter(r => r !== undefined && r !== "").map(Number)
         : [];

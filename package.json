@@ -1,0 +1,9 @@
+{
+  "name": "gym-tracking-tests",
+  "private": true,
+  "type": "module",
+  "description": "Test tooling only — the app itself has no build step (see docs/adr/0001-single-file-monolith.md).",
+  "scripts": {
+    "test": "node --test frontend/*.test.mjs"
+  }
+}

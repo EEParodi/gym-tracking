@@ -1,9 +1,12 @@
-Frontend Modularization Plan (Phase 2)
-- Goal: gradually split the single-file app into modular components and a data layer.
-- Current: UI lives in index.html with Babel; data layer is being introduced via frontend/supabaseClient.mjs.
-- Plan:
-  1) Create a src/ tree with components: DaySelector.jsx, WeekTabs.jsx, ExerciseCard.jsx, WeightInput.jsx, TypeToggle.jsx, App.jsx.
-  2) Introduce a simple data layer in src/services/supabaseClient.js that wraps Supabase calls.
-  3) Wire App.jsx to use the data layer for read/write; keep localStorage as an offline fallback during migration.
-  4) Add a minimal login screen (email/password) and migration trigger to supabaseClient.mjs for now.
-- Acceptance: app builds in a dev environment and UI behavior remains consistent during the interim.
+# Frontend Architecture
+
+- **Single file:** everything UI-related lives in `index.html` (config-driven `Tracker` component, driven by `PHASE_CONFIG`). No `src/` tree, no bundler.
+- **Data layer:** `frontend/supabaseClient.mjs` — a native ES module (`<script type="module">`), wrapping Supabase calls. No build step required to load it.
+- **Auth:** magic-link only via Supabase (`sendMagicLink`). No email/password.
+- **Storage:** localStorage as offline cache, Supabase Postgres as source of truth when logged in. See [`../docs/architecture.md`](../docs/architecture.md).
+
+## Superseded plan
+
+An earlier version of this file proposed a `src/` component tree (`DaySelector.jsx`, `WeekTabs.jsx`, etc.), a bundler-based dev build, and email/password login. That plan was superseded by commit `4241755`, which merged Phase 1 and Phase 2 into a single config-driven `Tracker` component and kept the app single-file. See [`../docs/adr/0001-single-file-monolith.md`](../docs/adr/0001-single-file-monolith.md) for the rationale, and `git show d4da9d6:frontend/README.md` for the original text.
+
+Do not reintroduce a `src/` tree or bundler without a new ADR superseding `0001`.
