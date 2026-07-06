@@ -75,6 +75,32 @@ export function calcSessionVolume(workingExercises, getVal, getType, activeDay) 
   }, 0);
 }
 
+/**
+ * Epley estimated 1RM: weight * (1 + reps / 30).
+ * @returns {number}
+ */
+export function epley(weight, reps) {
+  return weight * (1 + reps / 30);
+}
+
+/**
+ * Parse a prescribed reps string into a usable rep count + per-side flag.
+ * Takes the TOP of a range ("6–8" → 8). Time-based ("45s"), distance-based
+ * ("20m") and quality cues ("Burn", "—") return reps: null.
+ * @returns {{reps: number|null, perSide: boolean}}
+ */
+export function parseRepsMeta(repsStr) {
+  const s = String(repsStr || "").toLowerCase().trim();
+  const perSide = s.includes("/side") || s.includes("/leg") || s.includes("/arm");
+  if (/^\d+(\s*[–-]\s*\d+)?\s*s/.test(s)) return { reps: null, perSide };
+  if (/\d\s*m(\b|\/)/.test(s)) return { reps: null, perSide };
+  if (s.includes("burn") || s.includes("quality") || s.includes("—")) return { reps: null, perSide };
+  const m = s.match(/(\d+(?:\.\d+)?)(?:\s*[–-]\s*(\d+(?:\.\d+)?))?/);
+  if (!m) return { reps: null, perSide };
+  const top = m[2] ? parseFloat(m[2]) : parseFloat(m[1]);
+  return { reps: isNaN(top) ? null : top, perSide };
+}
+
 // Expose a global for the non-module Babel/JSX script in index.html.
 if (typeof window !== "undefined") {
   window.BusinessLogic = {
@@ -83,5 +109,7 @@ if (typeof window !== "undefined") {
     calcDeloadWeight,
     getPrevRPE,
     calcSessionVolume,
+    epley,
+    parseRepsMeta,
   };
 }

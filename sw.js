@@ -11,6 +11,7 @@ const APP_SHELL = [
   "./frontend/supabaseClient.mjs",
   "./frontend/rowConverters.mjs",
   "./frontend/businessLogic.mjs",
+  "./frontend/analysis.mjs",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

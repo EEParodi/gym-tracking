@@ -19,6 +19,7 @@
   </script>
   <script type="module" src="./frontend/supabaseClient.mjs"></script>
   <script type="module" src="./frontend/businessLogic.mjs"></script>
+  <script type="module" src="./frontend/analysis.mjs"></script>
   <script>
     // PWA service worker (ADR 0006). Skipped on localhost so the python dev
     // server never fights a stale cache.
@@ -241,7 +242,7 @@
     const PHASES = [
       { id: "phase1", label: "PHASE 1", status: "ACTIVE", description: "Current training tracker. Weeks, days, weights, cues, notes." },
       { id: "phase2", label: "PHASE 2", status: "READY", description: "Continues training with RPE logging per set. Unlocks after Phase 1." },
-      { id: "phase3", label: "PHASE 3", status: "PLANNED", description: "Future analysis, progression, and review layer." },
+      { id: "phase3", label: "PHASE 3", status: "ANALYSIS", description: "Cross-phase review: e1RM trends, plateau flags, and seeds for the next program." },
     ];
 
     const UI = {
@@ -383,11 +384,12 @@
               {PHASES.map((phase, index) => {
                 const isPhase1 = phase.id === "phase1";
                 const isPhase2 = phase.id === "phase2";
+                const isPhase3 = phase.id === "phase3";
                 const isComplete = isPhase1 && phase1Completed;
                 const canOpen =
                   (isPhase1 && (!!cloudUser || phase1Completed)) ||
-                  (isPhase2 && phase1Completed);
-                const isPending = isPhase2 && !phase1Completed;
+                  ((isPhase2 || isPhase3) && phase1Completed);
+                const isPending = (isPhase2 || isPhase3) && !phase1Completed;
                 const statusLabel =
                   isComplete ? "COMPLETE" :
                   canOpen ? "OPEN" :
@@ -1471,21 +1473,9 @@
 
     // === INSIGHTS ===
 
-    // Parse a prescribed reps string into a usable rep count + per-side flag.
-    // Time-based (holds, "45s") and distance-based (carries, "20–30m") are not rep-counted.
-    function parseRepsMeta(repsStr) {
-      const s = String(repsStr || "").toLowerCase().trim();
-      const perSide = s.includes("/side") || s.includes("/leg") || s.includes("/arm");
-      if (/^\d+(\s*[–-]\s*\d+)?\s*s/.test(s)) return { reps: null, perSide };
-      if (/\d\s*m(\b|\/)/.test(s)) return { reps: null, perSide };
-      if (s.includes("burn") || s.includes("quality") || s.includes("—")) return { reps: null, perSide };
-      const m = s.match(/(\d+(?:\.\d+)?)(?:\s*[–-]\s*(\d+(?:\.\d+)?))?/);
-      if (!m) return { reps: null, perSide };
-      const top = m[2] ? parseFloat(m[2]) : parseFloat(m[1]); // top of a range
-      return { reps: isNaN(top) ? null : top, perSide };
-    }
-
-    const epley = (w, reps) => w * (1 + reps / 30);
+    // Reps parsing + Epley 1RM live in frontend/businessLogic.mjs (unit tested).
+    const parseRepsMeta = (repsStr) => window.BusinessLogic.parseRepsMeta(repsStr);
+    const epley = (w, reps) => window.BusinessLogic.epley(w, reps);
     const isDeloadWeek = (week) => week.includes("Deload");
 
     function MiniChart({ points }) {
@@ -1710,6 +1700,119 @@
       );
     }
 
+    // === PHASE 3: CROSS-PHASE ANALYSIS ===
+
+    function Analysis({ onBack }) {
+      const [store, setStore] = useState({ w1: {}, w2: {}, rpe2: {} });
+
+      useEffect(() => {
+        const read = (k) => { try { return JSON.parse(localStorage.getItem(k) || "{}"); } catch (_) { return {}; } };
+        setStore({ w1: read(STORAGE_KEY), w2: read(STORAGE_KEY_P2), rpe2: read(RPE_KEY_P2) });
+      }, []);
+
+      const matches = useMemo(() => window.Analysis.matchExercisesAcrossPhases(PROGRAM, PROGRAM_P2), []);
+
+      const cards = useMemo(() => matches.map(m => {
+        const reps1 = parseRepsMeta(m.p1.reps).reps;
+        const reps2 = parseRepsMeta(m.p2.reps).reps;
+        const s1 = window.Analysis.buildE1rmSeries({ weights: store.w1, key: m.p1.key, weeks: WEEKS, reps: reps1 });
+        const s2 = window.Analysis.buildE1rmSeries({ weights: store.w2, key: m.p2.key, weeks: WEEKS_P2, reps: reps2 });
+        const logged = [...s1, ...s2].filter(p => p.weight != null);
+        if (!logged.length) return null;
+        const rpeByWeek = store.rpe2[m.p2.key] || {};
+        const lastRpe = [...WEEKS_P2].reverse().map(w => rpeByWeek[w]).find(r => r !== undefined && r !== "") ?? null;
+        const bestOf = (s) => Math.max(...s.filter(p => !p.deload && p.e1rm != null).map(p => p.e1rm), 0);
+        const best1 = bestOf(s1), best2 = bestOf(s2);
+        const delta = best1 > 0 && best2 > 0 ? ((best2 - best1) / best1) * 100 : null;
+        return {
+          key: m.p2.key, name: m.p2.name,
+          points: [...s1, ...s2].map(p => ({ label: p.week, value: p.e1rm, deload: p.deload })),
+          best1, best2, delta,
+          plateau: window.Analysis.detectPlateau(s2, rpeByWeek),
+          seed: window.Analysis.suggestPhaseSeed(s2, lastRpe),
+        };
+      }).filter(Boolean), [matches, store]);
+
+      const exportAnalysisMd = () => {
+        const lines = [`# Cross-Phase Analysis`, `_Generated: ${new Date().toISOString().slice(0, 10)}_`, ``];
+        for (const c of cards) {
+          lines.push(`## ${c.name}`);
+          if (c.best1 > 0) lines.push(`- Phase 1 best e1RM: ${c.best1.toFixed(1)}kg`);
+          if (c.best2 > 0) lines.push(`- Phase 2 best e1RM: ${c.best2.toFixed(1)}kg`);
+          if (c.delta != null) lines.push(`- Change: ${c.delta >= 0 ? "+" : ""}${c.delta.toFixed(1)}%`);
+          if (c.plateau) lines.push(`- ⚠ PLATEAU: flat e1RM at high RPE — deload or change stimulus`);
+          if (c.seed) lines.push(`- Next-phase W1 seed: ${c.seed.w1}kg (${c.seed.note})`);
+          lines.push(``);
+        }
+        const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `analysis_${new Date().toISOString().slice(0, 10)}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const cardBox = { background: UI.surface, border: `1px solid ${UI.borderVisible}`, borderRadius: 6, padding: "14px", marginBottom: 12 };
+      const stat = (label, value, color) => (
+        <div>
+          <div style={{ fontFamily: UI.mono, fontSize: 9, letterSpacing: "0.1em", color: UI.disabled }}>{label}</div>
+          <div style={{ fontFamily: UI.mono, fontSize: 17, fontWeight: 700, color: color || UI.display, marginTop: 3 }}>{value}</div>
+        </div>
+      );
+
+      return (
+        <div style={{ fontFamily: UI.sans, minHeight: "100vh", color: UI.primary, paddingBottom: 80 }}>
+          <div style={{ background: "rgba(0,0,0,0.94)", borderBottom: `1px solid ${UI.border}`, padding: "20px 16px 18px", position: "sticky", top: 0, zIndex: 10 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                <div style={{ fontFamily: UI.displayFont, fontSize: 44, lineHeight: 0.9, letterSpacing: "-0.06em", color: UI.display }}>ANALYSIS</div>
+                <div style={{ paddingTop: 6, fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: UI.disabled }}>PHASE 1 × PHASE 2</div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={exportAnalysisMd} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  EXPORT (.md)
+                </button>
+                <button onClick={onBack} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  ← HOME
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: "16px", maxWidth: 720, margin: "0 auto" }}>
+            {cards.length === 0 && (
+              <div style={{ fontFamily: UI.mono, fontSize: 12, color: UI.disabled, padding: "24px 0", textAlign: "center" }}>
+                No shared exercises with logged data across phases yet.
+              </div>
+            )}
+
+            {cards.map(c => (
+              <div key={c.key} style={cardBox}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: UI.display, letterSpacing: "-0.01em" }}>{c.name}</div>
+                  {c.plateau && (
+                    <span style={{ fontFamily: UI.mono, fontSize: 10, fontWeight: 700, color: UI.warning, background: "rgba(212,168,67,0.12)", border: `1px solid rgba(212,168,67,0.5)`, borderRadius: 3, padding: "3px 6px" }}>
+                      PLATEAU
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: 24, margin: "12px 0 4px", flexWrap: "wrap" }}>
+                  {stat("P1 BEST e1RM", c.best1 > 0 ? `${c.best1.toFixed(1)}kg` : "—")}
+                  {stat("P2 BEST e1RM", c.best2 > 0 ? `${c.best2.toFixed(1)}kg` : "—", UI.accent)}
+                  {c.delta != null && stat("CHANGE", `${c.delta >= 0 ? "+" : ""}${c.delta.toFixed(1)}%`, c.delta >= 0 ? UI.success : UI.accent)}
+                  {c.seed && stat("NEXT W1 SEED", `${c.seed.w1}kg`, c.seed.note === "up" ? UI.success : UI.warning)}
+                </div>
+
+                <MiniChart points={c.points} />
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     function App() {
       const [cloudUser, setCloudUser] = useState(null);
       const [authEmail, setAuthEmail] = useState("");
@@ -1782,6 +1885,9 @@
       }
       if (selectedPhase === "phase2" && phase1Completed) {
         return <Tracker config={PHASE_CONFIG.phase2} cloudUser={cloudUser} onBack={handleBack} completed={phase2Completed} setCompleted={setPhase2Completed} />;
+      }
+      if (selectedPhase === "phase3" && phase1Completed) {
+        return <Analysis onBack={handleBack} />;
       }
       return (
         <PhaseLanding

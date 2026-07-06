@@ -6,7 +6,24 @@ import {
   calcDeloadWeight,
   getPrevRPE,
   calcSessionVolume,
+  epley,
+  parseRepsMeta,
 } from "./businessLogic.mjs";
+
+test("epley: weight * (1 + reps/30)", () => {
+  assert.equal(epley(150, 5), 150 * (1 + 5 / 30));
+  assert.equal(epley(100, 1), 100 * (31 / 30));
+});
+
+test("parseRepsMeta: top of range, per-side flag, non-countable formats", () => {
+  assert.deepEqual(parseRepsMeta("6–8"), { reps: 8, perSide: false });
+  assert.deepEqual(parseRepsMeta("12"), { reps: 12, perSide: false });
+  assert.deepEqual(parseRepsMeta("10/leg"), { reps: 10, perSide: true });
+  assert.deepEqual(parseRepsMeta("45s"), { reps: null, perSide: false });
+  assert.deepEqual(parseRepsMeta("20m"), { reps: null, perSide: false });
+  assert.deepEqual(parseRepsMeta("Quality"), { reps: null, perSide: false });
+  assert.deepEqual(parseRepsMeta("20-30s/side"), { reps: null, perSide: true });
+});
 
 const WEEKS = ["W1", "W2", "W3", "W4", "W5 (Deload)"];
 

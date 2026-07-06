@@ -23,6 +23,7 @@ Agent-facing entry point for this repo. Read this first.
 | Debugging cloud sync | [`skills/sync-troubleshooting.md`](skills/sync-troubleshooting.md) |
 | Test patterns & extraction rules | [`skills/testing.md`](skills/testing.md) |
 | Rest timer, wake lock, Achilles check-in | [`skills/workout-mode.md`](skills/workout-mode.md) |
+| Phase 3 cross-phase analysis | [`skills/phase3-analysis.md`](skills/phase3-analysis.md) |
 | Architecture overview | [`docs/architecture.md`](docs/architecture.md) |
 | localStorage → Supabase migration | [`docs/migration.md`](docs/migration.md) |
 | Frontend architecture & history | [`frontend/README.md`](frontend/README.md) |
