@@ -73,7 +73,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect, useCallback, useMemo } = React;
+    const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
     // === PROGRAM DATA ===
 
@@ -235,6 +235,7 @@
     const RPE_KEY_P2       = "phase2-rpe-v1";
     const FAVOURITES_KEY_P2 = "phase2-favourites-v1";
     const REPS_KEY_P2      = "phase2-reps-v1";
+    const CHECKIN_KEY_P2   = "phase2-checkin-v1";
     const LAST_PHASE_KEY   = "phase-tracker-last-phase";
 
     const PHASES = [
@@ -636,6 +637,12 @@
       });
       const [hydrating, setHydrating] = useState(false);
       const [confirmingPhaseAction, setConfirmingPhaseAction] = useState(null); // "end" | "reopen" | null
+      const [restEndsAt, setRestEndsAt] = useState(null);
+      const [restNow, setRestNow] = useState(Date.now());
+      const [restDone, setRestDone] = useState(false);
+      const [wakeLockOn, setWakeLockOn] = useState(false);
+      const wakeLockRef = useRef(null);
+      const [checkins, setCheckins] = useState({});
       const [summaryDismissed, setSummaryDismissed] = useState(false);
       const [inputFocused, setInputFocused] = useState(false);
       const [favourites, setFavourites] = useState({});
@@ -674,6 +681,8 @@
           if (config.hasRPE) {
             const savedFav = localStorage.getItem(FAVOURITES_KEY_P2);
             if (savedFav) setFavourites(JSON.parse(savedFav));
+            const savedCheckins = localStorage.getItem(CHECKIN_KEY_P2);
+            if (savedCheckins) setCheckins(JSON.parse(savedCheckins));
           }
           const { week, day } = computeNextWorkingDay(config, loadedWeights, loadedTypes);
           setActiveWeek(week);
@@ -867,6 +876,64 @@
         setTimeout(() => setImportStatus("idle"), 3000);
       };
 
+      // Rest timer — presets match real rest habits (2–4 min depending on effort).
+      useEffect(() => {
+        if (!restEndsAt) return;
+        const id = setInterval(() => {
+          setRestNow(Date.now());
+          if (Date.now() >= restEndsAt) {
+            setRestEndsAt(null);
+            setRestDone(true);
+            try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (_) {}
+            setTimeout(() => setRestDone(false), 4000);
+          }
+        }, 250);
+        return () => clearInterval(id);
+      }, [restEndsAt]);
+      const restRemaining = restEndsAt ? Math.max(0, Math.ceil((restEndsAt - restNow) / 1000)) : 0;
+      const fmtRest = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      const startRest = (seconds) => {
+        setRestDone(false);
+        setRestNow(Date.now());
+        setRestEndsAt(Date.now() + seconds * 1000);
+      };
+
+      // Screen wake lock — keeps the display on mid-session. Hidden if unsupported.
+      const wakeLockSupported = typeof navigator !== "undefined" && "wakeLock" in navigator;
+      const toggleWakeLock = async () => {
+        if (wakeLockOn) {
+          try { await wakeLockRef.current?.release(); } catch (_) {}
+          wakeLockRef.current = null;
+          setWakeLockOn(false);
+          return;
+        }
+        try {
+          wakeLockRef.current = await navigator.wakeLock.request("screen");
+          setWakeLockOn(true);
+        } catch (_) { setWakeLockOn(false); }
+      };
+      useEffect(() => {
+        if (!wakeLockOn) return;
+        const reacquire = async () => {
+          if (document.visibilityState === "visible") {
+            try { wakeLockRef.current = await navigator.wakeLock.request("screen"); } catch (_) {}
+          }
+        };
+        document.addEventListener("visibilitychange", reacquire);
+        return () => {
+          document.removeEventListener("visibilitychange", reacquire);
+          try { wakeLockRef.current?.release(); } catch (_) {}
+        };
+      }, [wakeLockOn]);
+
+      // Achilles check-in (P2 only) — 1 fine … 5 pain, per day+week, local-only.
+      const setCheckin = (score) => {
+        const current = checkins[activeDay]?.[activeWeek];
+        const updated = { ...checkins, [activeDay]: { ...(checkins[activeDay] || {}), [activeWeek]: current === score ? undefined : score } };
+        setCheckins(updated);
+        try { localStorage.setItem(CHECKIN_KEY_P2, JSON.stringify(updated)); } catch (_) {}
+      };
+
       const recordSyncTime = () => {
         const now = new Date().toISOString();
         setLastSyncedAt(now);
@@ -1006,6 +1073,11 @@
                 <button onClick={onBack} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
                   ALL PHASES
                 </button>
+                {wakeLockSupported && (
+                  <button onClick={toggleWakeLock} aria-pressed={wakeLockOn} style={{ background: wakeLockOn ? UI.warning : UI.black, border: `1px solid ${wakeLockOn ? UI.warning : UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: wakeLockOn ? UI.black : UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer", transition: UI.ease }}>
+                    {wakeLockOn ? "AWAKE ON" : "KEEP AWAKE"}
+                  </button>
+                )}
                 {!completed && isPhaseComplete() && (
                   <button onClick={() => {
                     if (confirmingPhaseAction !== "end") {
@@ -1309,6 +1381,29 @@
             })}
           </div>
 
+          {/* Rest timer — floating, hidden while the summary sheet is up */}
+          {!showSummary && (
+            <div aria-live="polite" style={{ position: "fixed", bottom: 16, right: 16, zIndex: 90, display: "flex", gap: 6, alignItems: "center", background: "rgba(0,0,0,0.92)", border: `1px solid ${restDone ? UI.accent : restEndsAt ? UI.warning : UI.borderVisible}`, borderRadius: 6, padding: "8px 10px" }}>
+              {restEndsAt ? (
+                <>
+                  <span style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 15, color: UI.warning, letterSpacing: "0.06em" }}>{fmtRest(restRemaining)}</span>
+                  <button aria-label="Cancel rest timer" onClick={() => setRestEndsAt(null)} style={{ background: "none", border: `1px solid ${UI.border}`, borderRadius: 4, color: UI.disabled, fontSize: 12, cursor: "pointer", padding: "3px 8px", fontFamily: UI.mono }}>✕</button>
+                </>
+              ) : restDone ? (
+                <span style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 11, color: UI.accent, letterSpacing: "0.08em" }}>REST OVER — GO</span>
+              ) : (
+                <>
+                  <span style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.1em" }}>REST</span>
+                  {[120, 180, 240].map(s => (
+                    <button key={s} onClick={() => startRest(s)} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "4px 8px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.04em", cursor: "pointer", transition: UI.ease }}>
+                      {s / 60}:00
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Session Summary Bottom Sheet — P2 only */}
           {showSummary && (
             <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: UI.surface, borderTop: `1px solid ${UI.borderVisible}`, borderRadius: "14px 14px 0 0", padding: "20px 20px 40px", zIndex: 100, animation: "slideUp 0.25s cubic-bezier(0.25,0.1,0.25,1)" }}>
@@ -1342,6 +1437,27 @@
                   <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em", marginBottom: 6 }}>WORKING SETS</div>
                   <div style={{ fontFamily: UI.mono, fontSize: 18, fontWeight: 700, color: UI.primary }}>{totalSets}</div>
                   <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>done</div>
+                </div>
+              </div>
+              {/* Achilles check-in — 1 fine … 5 pain, per session, local-only */}
+              <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em" }}>ACHILLES CHECK-IN · 1 FINE — 5 PAIN</div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[1, 2, 3, 4, 5].map(n => {
+                    const active = checkins[activeDay]?.[activeWeek] === n;
+                    const scoreColor = n <= 2 ? UI.success : n === 3 ? UI.warning : UI.accent;
+                    return (
+                      <button key={n} onClick={() => setCheckin(n)} aria-pressed={active} aria-label={`Achilles score ${n}`} style={{
+                        background: active ? scoreColor : UI.black,
+                        border: `1px solid ${active ? scoreColor : UI.borderVisible}`,
+                        borderRadius: 4, padding: "5px 9px", cursor: "pointer",
+                        color: active ? UI.black : UI.disabled,
+                        fontFamily: UI.mono, fontWeight: 700, fontSize: 11, transition: UI.ease,
+                      }}>
+                        {n}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1401,7 +1517,7 @@
 
     function Insights({ onBack }) {
       const [reps, setReps] = useState({});
-      const [data, setData] = useState({ weights: {}, rpe: {}, types: {}, favourites: {} });
+      const [data, setData] = useState({ weights: {}, rpe: {}, types: {}, favourites: {}, checkins: {} });
       const [wf, setWf] = useState({ weight: "", reps: "", sets: "1" });
 
       useEffect(() => {
@@ -1411,6 +1527,7 @@
           rpe: read(RPE_KEY_P2),
           types: read(TYPES_KEY_P2),
           favourites: read(FAVOURITES_KEY_P2),
+          checkins: read(CHECKIN_KEY_P2),
         });
         setReps(read(REPS_KEY_P2));
       }, []);
@@ -1485,6 +1602,32 @@
                 </div>
               </div>
             </div>
+
+            {/* Achilles check-in history */}
+            {Object.keys(data.checkins).length > 0 && (
+              <div style={cardBox}>
+                <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary, marginBottom: 10 }}>ACHILLES CHECK-INS · 1 FINE — 5 PAIN</div>
+                {Object.entries(data.checkins).map(([day, byWeek]) => {
+                  const scores = Object.entries(byWeek).filter(([, v]) => v != null);
+                  if (!scores.length) return null;
+                  return (
+                    <div key={day} style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: UI.mono, fontSize: 11, marginBottom: 6 }}>
+                      <span style={{ width: 84, color: UI.secondary }}>{day.toUpperCase()}</span>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {scores.map(([week, score]) => {
+                          const scoreColor = score <= 2 ? UI.success : score === 3 ? UI.warning : UI.accent;
+                          return (
+                            <span key={week} style={{ color: scoreColor, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px", fontSize: 10 }}>
+                              {week.replace(" (Deload)", " DL")} · {score}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {!favKeys.length && (
               <div style={{ fontFamily: UI.mono, fontSize: 11, lineHeight: 1.6, color: UI.disabled, padding: "0 2px 14px" }}>

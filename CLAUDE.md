@@ -22,6 +22,7 @@ Agent-facing entry point for this repo. Read this first.
 | Shipping to GitHub Pages | [`skills/deploy.md`](skills/deploy.md) |
 | Debugging cloud sync | [`skills/sync-troubleshooting.md`](skills/sync-troubleshooting.md) |
 | Test patterns & extraction rules | [`skills/testing.md`](skills/testing.md) |
+| Rest timer, wake lock, Achilles check-in | [`skills/workout-mode.md`](skills/workout-mode.md) |
 | Architecture overview | [`docs/architecture.md`](docs/architecture.md) |
 | localStorage → Supabase migration | [`docs/migration.md`](docs/migration.md) |
 | Frontend architecture & history | [`frontend/README.md`](frontend/README.md) |
