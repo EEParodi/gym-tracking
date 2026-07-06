@@ -1,7 +1,13 @@
 // Supabase ES Module wrapper for Phase 1 Tracker
 // Auth helpers plus localStorage <-> Supabase row hydration for Phase 1.
 
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+import {
+  localStateToRows,
+  rowsToLocalState,
+  localStateToRowsP2,
+  rowsToP2State,
+} from "./rowConverters.mjs";
 
 // Prefer runtime-provided values to avoid hard-coding secrets in source.
 const SUPABASE_URL = (typeof window !== 'undefined' && window.SUPABASE_URL) || "https://xxxx.supabase.co";
@@ -72,54 +78,8 @@ export async function logout() {
   return client.auth.signOut();
 }
 
-function localStateToRows(weights, types, userId, metaByKey = {}) {
-  const rows = [];
-  const today = new Date().toISOString().split("T")[0];
-
-  for (const [dayKey, weekMap] of Object.entries(weights || {})) {
-    const [day, exercise] = dayKey.split("||");
-    if (!day || !exercise) continue;
-
-    for (const [week, data] of Object.entries(weekMap || {})) {
-      const meta = metaByKey[dayKey] || {};
-      rows.push({
-        user_id: userId,
-        date: today,
-        week,
-        day,
-        section: meta.section ?? data?.section ?? "",
-        exercise,
-        sets: Number.isFinite(Number(meta.sets ?? data?.sets)) ? Number(meta.sets ?? data?.sets) : 0,
-        reps: String(meta.reps ?? data?.reps ?? ""),
-        weight: String(data?.weight ?? ""),
-        type: String(types?.[dayKey] ?? data?.type ?? ""),
-        notes: String(data?.comment ?? data?.notes ?? ""),
-        updated_at: new Date().toISOString(),
-      });
-    }
-  }
-
-  return rows;
-}
-
-function rowsToLocalState(rows) {
-  const weights = {};
-  const types = {};
-
-  for (const row of rows || []) {
-    if (!row?.day || !row?.exercise || !row?.week) continue;
-    const key = `${row.day}||${row.exercise}`;
-    if (!weights[key]) weights[key] = {};
-    weights[key][row.week] = {
-      weight: row.type === "bw" ? "" : String(row.weight ?? ""),
-      comment: String(row.notes ?? ""),
-    };
-    if (row.type) types[key] = row.type;
-  }
-
-  return { weights, types };
-}
-
+// Converters live in ./rowConverters.mjs (pure, unit-tested). Re-exported here
+// for existing consumers of the window.supabase API.
 export function localStorageStateToRows({ weights, types, userId, metaByKey }) {
   return localStateToRows(weights, types, userId, metaByKey);
 }
@@ -183,55 +143,6 @@ export async function migrateLocalToSupabaseIfNeeded(userId) {
 }
 
 // === Phase 2 helpers (tracker_data_p2, adds rpe field) ===
-
-function localStateToRowsP2(weights, types, rpeLog, userId, metaByKey = {}) {
-  const rows = [];
-  const today = new Date().toISOString().split("T")[0];
-  for (const [dayKey, weekMap] of Object.entries(weights || {})) {
-    const [day, exercise] = dayKey.split("||");
-    if (!day || !exercise) continue;
-    for (const [week, data] of Object.entries(weekMap || {})) {
-      const meta = metaByKey[dayKey] || {};
-      const rpeVal = rpeLog?.[dayKey]?.[week];
-      rows.push({
-        user_id: userId,
-        date: today,
-        week, day,
-        section: meta.section ?? data?.section ?? "",
-        exercise,
-        sets: Number.isFinite(Number(meta.sets ?? data?.sets)) ? Number(meta.sets ?? data?.sets) : 0,
-        reps: String(meta.reps ?? data?.reps ?? ""),
-        weight: String(data?.weight ?? ""),
-        rpe: rpeVal ? parseFloat(rpeVal) : null,
-        type: String(types?.[dayKey] ?? data?.type ?? ""),
-        notes: String(data?.comment ?? data?.notes ?? ""),
-        updated_at: new Date().toISOString(),
-      });
-    }
-  }
-  return rows;
-}
-
-function rowsToP2State(rows) {
-  const weights = {};
-  const types = {};
-  const rpeLog = {};
-  for (const row of rows || []) {
-    if (!row?.day || !row?.exercise || !row?.week) continue;
-    const key = `${row.day}||${row.exercise}`;
-    if (!weights[key]) weights[key] = {};
-    weights[key][row.week] = {
-      weight: row.type === "bw" ? "" : String(row.weight ?? ""),
-      comment: String(row.notes ?? ""),
-    };
-    if (row.type) types[key] = row.type;
-    if (row.rpe != null) {
-      if (!rpeLog[key]) rpeLog[key] = {};
-      rpeLog[key][row.week] = String(row.rpe);
-    }
-  }
-  return { weights, types, rpeLog };
-}
 
 export async function fetchAllDataForUserP2(userId) {
   if (!userId) return { data: [], error: new Error("Missing userId") };

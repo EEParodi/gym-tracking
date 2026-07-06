@@ -48,6 +48,13 @@
       from { transform: translateY(100%); opacity: 0; }
       to   { transform: translateY(0);    opacity: 1; }
     }
+    button:focus-visible, input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -299,6 +306,8 @@
               <button
                 key={opt.id}
                 title={opt.title}
+                aria-label={opt.title}
+                aria-pressed={active}
                 onClick={() => onChange(active ? null : opt.id)}
                 style={{
                   background: active ? UI.display : UI.black,
@@ -608,6 +617,12 @@
       const [saveStatus, setSaveStatus] = useState("");
       const [syncStatus, setSyncStatus] = useState("idle");
       const [importStatus, setImportStatus] = useState("idle");
+      const [syncError, setSyncError] = useState("");
+      const [lastSyncedAt, setLastSyncedAt] = useState(() => {
+        try { return localStorage.getItem(`${config.phaseKey}-last-synced-v1`) || null; } catch (_) { return null; }
+      });
+      const [hydrating, setHydrating] = useState(false);
+      const [confirmingPhaseAction, setConfirmingPhaseAction] = useState(null); // "end" | "reopen" | null
       const [summaryDismissed, setSummaryDismissed] = useState(false);
       const [inputFocused, setInputFocused] = useState(false);
       const [favourites, setFavourites] = useState({});
@@ -700,7 +715,10 @@
             }
           }
         };
-        syncFromCloud();
+        setHydrating(true);
+        syncFromCloud()
+          .catch(() => {})
+          .finally(() => { if (alive) setHydrating(false); });
         return () => { alive = false; };
       }, [cloudUser?.id]);
 
@@ -720,7 +738,7 @@
         try {
           localStorage.setItem(config.typesKey, JSON.stringify(newTypes));
           localStorage.setItem(LAST_PHASE_KEY, config.phaseKey);
-        } catch (_) { console.warn("Failed to save types to localStorage"); }
+        } catch (_) {}
       }, []);
 
       const handleWeight = (day, exercise, value) => {
@@ -774,10 +792,17 @@
           return;
         }
         setSyncStatus("syncing");
+        setSyncError("");
         const payload = { userId: cloudUser.id, weights, types, metaByKey: config.meta };
         if (config.hasRPE) payload.rpeLog = rpeLog;
-        const result = await window.supabase[config.upsertFn](payload);
+        let result;
+        try {
+          result = await window.supabase[config.upsertFn](payload);
+        } catch (err) {
+          result = { error: err };
+        }
         if (result?.error) {
+          setSyncError(result.error.message || String(result.error));
           setSyncStatus("error");
           setTimeout(() => setSyncStatus("idle"), 3000);
           return;
@@ -787,6 +812,7 @@
           setTimeout(() => setSyncStatus("idle"), 2500);
           return;
         }
+        recordSyncTime();
         setSyncStatus("ok");
         setTimeout(() => setSyncStatus("idle"), 3000);
       };
@@ -798,7 +824,16 @@
           return;
         }
         setImportStatus("importing");
-        const remote = await window.supabase[config.hydrateFn](cloudUser.id);
+        setSyncError("");
+        let remote;
+        try {
+          remote = await window.supabase[config.hydrateFn](cloudUser.id);
+        } catch (err) {
+          setSyncError(err.message || String(err));
+          setImportStatus("error");
+          setTimeout(() => setImportStatus("idle"), 3000);
+          return;
+        }
         const rowsLoaded = Object.keys(remote?.weights || {}).length;
         if (!rowsLoaded) {
           setImportStatus("empty");
@@ -814,9 +849,25 @@
           if (config.rpeKey) localStorage.setItem(config.rpeKey, JSON.stringify(remote.rpeLog || {}));
           localStorage.setItem(LAST_PHASE_KEY, config.phaseKey);
         } catch (_) {}
+        recordSyncTime();
         setImportStatus("ok");
         setTimeout(() => setImportStatus("idle"), 3000);
       };
+
+      const recordSyncTime = () => {
+        const now = new Date().toISOString();
+        setLastSyncedAt(now);
+        try { localStorage.setItem(`${config.phaseKey}-last-synced-v1`, now); } catch (_) {}
+      };
+
+      const lastSyncLabel = (() => {
+        if (!lastSyncedAt) return null;
+        const d = new Date(lastSyncedAt);
+        if (isNaN(d)) return null;
+        const sameDay = d.toDateString() === new Date().toDateString();
+        const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+        return sameDay ? time : `${d.toLocaleDateString([], { day: "2-digit", month: "short" }).toUpperCase()} ${time}`;
+      })();
 
       useEffect(() => { setSummaryDismissed(false); }, [activeDay]);
 
@@ -906,6 +957,11 @@
                 <div style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, letterSpacing: "0.08em" }}>
                   {cloudUser ? `CLOUD / ${cloudUser.email || cloudUser.id}` : "CLOUD / OFFLINE"}
                 </div>
+                {lastSyncLabel && (
+                  <div style={{ fontFamily: UI.mono, fontSize: 10, color: UI.disabled, letterSpacing: "0.08em" }}>
+                    LAST SYNC {lastSyncLabel}
+                  </div>
+                )}
                 <button onClick={importFromCloud} disabled={importStatus === "importing" || !cloudUser} style={{
                   background: importStyles.bg, border: `1px solid ${importStyles.border}`,
                   borderRadius: 4, cursor: importStatus === "importing" || !cloudUser ? "default" : "pointer",
@@ -924,6 +980,12 @@
                 }}>
                   {syncStyles.label}
                 </button>
+                <div aria-live="polite" style={{ fontFamily: UI.mono, fontSize: 10, letterSpacing: "0.06em", textAlign: "right", maxWidth: 220 }}>
+                  {hydrating && <span style={{ color: UI.disabled }}>LOADING CLOUD DATA…</span>}
+                  {!hydrating && (syncStatus === "error" || importStatus === "error") && syncError && (
+                    <span style={{ color: UI.secondary }}>{syncError}</span>
+                  )}
+                </div>
               </div>
             </div>
             <div style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -933,22 +995,30 @@
                 </button>
                 {!completed && isPhaseComplete() && (
                   <button onClick={() => {
-                    if (confirm(`End ${config.label}? This will freeze the phase and mark it as complete.`)) {
-                      setCompleted(true);
-                      try { localStorage.setItem(config.completedKey, "true"); } catch (_) {}
+                    if (confirmingPhaseAction !== "end") {
+                      setConfirmingPhaseAction("end");
+                      setTimeout(() => setConfirmingPhaseAction(c => (c === "end" ? null : c)), 3000);
+                      return;
                     }
-                  }} style={{ background: UI.accent, border: `1px solid ${UI.accent}`, borderRadius: 4, padding: "7px 10px", color: UI.black, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
-                    END PHASE
+                    setConfirmingPhaseAction(null);
+                    setCompleted(true);
+                    try { localStorage.setItem(config.completedKey, "true"); } catch (_) {}
+                  }} style={{ background: confirmingPhaseAction === "end" ? UI.warning : UI.accent, border: `1px solid ${confirmingPhaseAction === "end" ? UI.warning : UI.accent}`, borderRadius: 4, padding: "7px 10px", color: UI.black, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer", transition: UI.ease }}>
+                    {confirmingPhaseAction === "end" ? "TAP AGAIN TO CONFIRM" : "END PHASE"}
                   </button>
                 )}
                 {completed && (
                   <button onClick={() => {
-                    if (confirm(`Reopen ${config.label} for edits? This will allow new entries.`)) {
-                      setCompleted(false);
-                      try { localStorage.setItem(config.completedKey, "false"); } catch (_) {}
+                    if (confirmingPhaseAction !== "reopen") {
+                      setConfirmingPhaseAction("reopen");
+                      setTimeout(() => setConfirmingPhaseAction(c => (c === "reopen" ? null : c)), 3000);
+                      return;
                     }
-                  }} style={{ background: UI.black, border: `1px solid ${UI.warning}`, borderRadius: 4, padding: "7px 10px", color: UI.warning, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
-                    EDIT LOG
+                    setConfirmingPhaseAction(null);
+                    setCompleted(false);
+                    try { localStorage.setItem(config.completedKey, "false"); } catch (_) {}
+                  }} style={{ background: confirmingPhaseAction === "reopen" ? UI.warning : UI.black, border: `1px solid ${UI.warning}`, borderRadius: 4, padding: "7px 10px", color: confirmingPhaseAction === "reopen" ? UI.black : UI.warning, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer", transition: UI.ease }}>
+                    {confirmingPhaseAction === "reopen" ? "TAP AGAIN TO CONFIRM" : "EDIT LOG"}
                   </button>
                 )}
                 {completed && (
@@ -963,7 +1033,7 @@
           {/* Week Tabs */}
           <div style={{ background: UI.black, borderBottom: `1px solid ${UI.border}`, padding: "0 16px", display: "flex", gap: 0, overflowX: "auto" }}>
             {config.weeks.map(w => (
-              <button key={w} onClick={() => setActiveWeek(w)} style={{
+              <button key={w} onClick={() => setActiveWeek(w)} aria-pressed={activeWeek === w} style={{
                 background: "none", border: "none", cursor: "pointer",
                 padding: "13px 14px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
                 fontFamily: UI.mono,
@@ -1017,6 +1087,7 @@
                 <div key={section} style={{ marginBottom: 32 }}>
                   <button
                     onClick={() => isWarmUp && setCollapsedSections(prev => ({ ...prev, [collapseKey]: !isCollapsed }))}
+                    aria-expanded={isWarmUp ? !isCollapsed : undefined}
                     style={{
                       width: "100%", display: "flex", alignItems: "center",
                       justifyContent: "space-between", gap: 12,
@@ -1026,7 +1097,7 @@
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 8, height: 8, background: color, borderRadius: 99 }} />
+                      <div aria-hidden="true" style={{ width: 8, height: 8, background: color, borderRadius: 99 }} />
                       <span style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary }}>{section}</span>
                     </div>
                     <span style={{ fontFamily: UI.mono, fontSize: 10, letterSpacing: "0.08em", color: UI.disabled }}>
@@ -1064,8 +1135,9 @@
                       : null;
                     const deloadSuggestedKg = deloadBest ? calcDeloadWeight(deloadBest) : null;
 
-                    const prevWeekWeights = config.hasRPE
-                      ? config.weeks.slice(0, config.weeks.indexOf(activeWeek)).map(w => weights[`${activeDay}||${ex.name}`]?.[w]?.weight).filter(Boolean).map(parseFloat)
+                    const activeWeekIdx = config.weeks.indexOf(activeWeek);
+                    const prevWeekWeights = config.hasRPE && activeWeekIdx > 0
+                      ? config.weeks.slice(0, activeWeekIdx).map(w => weights[`${activeDay}||${ex.name}`]?.[w]?.weight).filter(Boolean).map(parseFloat)
                       : [];
                     const isPR = config.hasRPE && wVal && !isBW && prevWeekWeights.length > 0 && parseFloat(wVal) > Math.max(...prevWeekWeights);
 
@@ -1091,6 +1163,8 @@
                                     <button
                                       onClick={(e) => { e.stopPropagation(); toggleFavourite(activeDay, ex.name); }}
                                       title={isFav ? "Remove from insights" : "Track on insights"}
+                                      aria-label={isFav ? `Remove ${ex.name} from insights` : `Track ${ex.name} on insights`}
+                                      aria-pressed={isFav}
                                       style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 15, lineHeight: 1, color: isFav ? UI.warning : UI.disabled }}
                                     >
                                       {isFav ? "★" : "☆"}
@@ -1163,7 +1237,12 @@
                                   placeholder={isBW ? "BW" : (prev ? String(prev.weight) : "kg")}
                                   value={isBW ? "" : wVal}
                                   disabled={isBW}
-                                  onChange={e => handleWeight(activeDay, ex.name, e.target.value)}
+                                  onChange={e => {
+                                    const raw = e.target.value;
+                                    if (raw === "" || raw === ".") { handleWeight(activeDay, ex.name, raw); return; }
+                                    const n = parseFloat(raw);
+                                    if (!isNaN(n) && n >= 0 && n <= 500) handleWeight(activeDay, ex.name, raw);
+                                  }}
                                   onFocus={() => setInputFocused(true)}
                                   onBlur={() => setInputFocused(false)}
                                   style={{
@@ -1477,9 +1556,7 @@
 
     function App() {
       const [cloudUser, setCloudUser] = useState(null);
-      const [authEmail, setAuthEmail] = useState(() => {
-        try { return window.SUPABASE_LOGIN_EMAIL || ""; } catch (_) { return ""; }
-      });
+      const [authEmail, setAuthEmail] = useState("");
       const [authStatus, setAuthStatus] = useState("idle");
       const [selectedPhase, setSelectedPhase] = useState(() => {
         try { return localStorage.getItem(LAST_PHASE_KEY) || null; } catch (_) { return null; }

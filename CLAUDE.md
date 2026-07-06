@@ -17,7 +17,11 @@ Agent-facing entry point for this repo. Read this first.
 | Conventions, data model, core logic rules | [`skills/app-conventions.md`](skills/app-conventions.md) |
 | UI/color/typography spec | [`skills/design-system.md`](skills/design-system.md) |
 | Supabase auth & database | [`skills/supabase.md`](skills/supabase.md) |
-| Google Sheets export | [`skills/google-sheets-sync.md`](skills/google-sheets-sync.md) |
+| CSV / Markdown export | [`skills/export.md`](skills/export.md) |
+| Phase 2 suggestions, PRs, Insights | [`skills/phase2-insights.md`](skills/phase2-insights.md) |
+| Shipping to GitHub Pages | [`skills/deploy.md`](skills/deploy.md) |
+| Debugging cloud sync | [`skills/sync-troubleshooting.md`](skills/sync-troubleshooting.md) |
+| Test patterns & extraction rules | [`skills/testing.md`](skills/testing.md) |
 | Architecture overview | [`docs/architecture.md`](docs/architecture.md) |
 | localStorage → Supabase migration | [`docs/migration.md`](docs/migration.md) |
 | Frontend architecture & history | [`frontend/README.md`](frontend/README.md) |
