@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>Training Tracker</title>
+  <meta name="theme-color" content="#000000" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/png" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
   <link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -15,6 +19,16 @@
   </script>
   <script type="module" src="./frontend/supabaseClient.mjs"></script>
   <script type="module" src="./frontend/businessLogic.mjs"></script>
+  <script type="module" src="./frontend/analysis.mjs"></script>
+  <script>
+    // PWA service worker (ADR 0006). Skipped on localhost so the python dev
+    // server never fights a stale cache.
+    if ("serviceWorker" in navigator && !["localhost", "127.0.0.1", ""].includes(location.hostname)) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(() => {});
+      });
+    }
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -60,7 +74,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect, useCallback, useMemo } = React;
+    const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
     // === PROGRAM DATA ===
 
@@ -222,12 +236,13 @@
     const RPE_KEY_P2       = "phase2-rpe-v1";
     const FAVOURITES_KEY_P2 = "phase2-favourites-v1";
     const REPS_KEY_P2      = "phase2-reps-v1";
+    const CHECKIN_KEY_P2   = "phase2-checkin-v1";
     const LAST_PHASE_KEY   = "phase-tracker-last-phase";
 
     const PHASES = [
       { id: "phase1", label: "PHASE 1", status: "ACTIVE", description: "Current training tracker. Weeks, days, weights, cues, notes." },
       { id: "phase2", label: "PHASE 2", status: "READY", description: "Continues training with RPE logging per set. Unlocks after Phase 1." },
-      { id: "phase3", label: "PHASE 3", status: "PLANNED", description: "Future analysis, progression, and review layer." },
+      { id: "phase3", label: "PHASE 3", status: "ANALYSIS", description: "Cross-phase review: e1RM trends, plateau flags, and seeds for the next program." },
     ];
 
     const UI = {
@@ -369,11 +384,12 @@
               {PHASES.map((phase, index) => {
                 const isPhase1 = phase.id === "phase1";
                 const isPhase2 = phase.id === "phase2";
+                const isPhase3 = phase.id === "phase3";
                 const isComplete = isPhase1 && phase1Completed;
                 const canOpen =
                   (isPhase1 && (!!cloudUser || phase1Completed)) ||
-                  (isPhase2 && phase1Completed);
-                const isPending = isPhase2 && !phase1Completed;
+                  ((isPhase2 || isPhase3) && phase1Completed);
+                const isPending = (isPhase2 || isPhase3) && !phase1Completed;
                 const statusLabel =
                   isComplete ? "COMPLETE" :
                   canOpen ? "OPEN" :
@@ -623,6 +639,12 @@
       });
       const [hydrating, setHydrating] = useState(false);
       const [confirmingPhaseAction, setConfirmingPhaseAction] = useState(null); // "end" | "reopen" | null
+      const [restEndsAt, setRestEndsAt] = useState(null);
+      const [restNow, setRestNow] = useState(Date.now());
+      const [restDone, setRestDone] = useState(false);
+      const [wakeLockOn, setWakeLockOn] = useState(false);
+      const wakeLockRef = useRef(null);
+      const [checkins, setCheckins] = useState({});
       const [summaryDismissed, setSummaryDismissed] = useState(false);
       const [inputFocused, setInputFocused] = useState(false);
       const [favourites, setFavourites] = useState({});
@@ -661,6 +683,8 @@
           if (config.hasRPE) {
             const savedFav = localStorage.getItem(FAVOURITES_KEY_P2);
             if (savedFav) setFavourites(JSON.parse(savedFav));
+            const savedCheckins = localStorage.getItem(CHECKIN_KEY_P2);
+            if (savedCheckins) setCheckins(JSON.parse(savedCheckins));
           }
           const { week, day } = computeNextWorkingDay(config, loadedWeights, loadedTypes);
           setActiveWeek(week);
@@ -854,6 +878,64 @@
         setTimeout(() => setImportStatus("idle"), 3000);
       };
 
+      // Rest timer — presets match real rest habits (2–4 min depending on effort).
+      useEffect(() => {
+        if (!restEndsAt) return;
+        const id = setInterval(() => {
+          setRestNow(Date.now());
+          if (Date.now() >= restEndsAt) {
+            setRestEndsAt(null);
+            setRestDone(true);
+            try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (_) {}
+            setTimeout(() => setRestDone(false), 4000);
+          }
+        }, 250);
+        return () => clearInterval(id);
+      }, [restEndsAt]);
+      const restRemaining = restEndsAt ? Math.max(0, Math.ceil((restEndsAt - restNow) / 1000)) : 0;
+      const fmtRest = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      const startRest = (seconds) => {
+        setRestDone(false);
+        setRestNow(Date.now());
+        setRestEndsAt(Date.now() + seconds * 1000);
+      };
+
+      // Screen wake lock — keeps the display on mid-session. Hidden if unsupported.
+      const wakeLockSupported = typeof navigator !== "undefined" && "wakeLock" in navigator;
+      const toggleWakeLock = async () => {
+        if (wakeLockOn) {
+          try { await wakeLockRef.current?.release(); } catch (_) {}
+          wakeLockRef.current = null;
+          setWakeLockOn(false);
+          return;
+        }
+        try {
+          wakeLockRef.current = await navigator.wakeLock.request("screen");
+          setWakeLockOn(true);
+        } catch (_) { setWakeLockOn(false); }
+      };
+      useEffect(() => {
+        if (!wakeLockOn) return;
+        const reacquire = async () => {
+          if (document.visibilityState === "visible") {
+            try { wakeLockRef.current = await navigator.wakeLock.request("screen"); } catch (_) {}
+          }
+        };
+        document.addEventListener("visibilitychange", reacquire);
+        return () => {
+          document.removeEventListener("visibilitychange", reacquire);
+          try { wakeLockRef.current?.release(); } catch (_) {}
+        };
+      }, [wakeLockOn]);
+
+      // Achilles check-in (P2 only) — 1 fine … 5 pain, per day+week, local-only.
+      const setCheckin = (score) => {
+        const current = checkins[activeDay]?.[activeWeek];
+        const updated = { ...checkins, [activeDay]: { ...(checkins[activeDay] || {}), [activeWeek]: current === score ? undefined : score } };
+        setCheckins(updated);
+        try { localStorage.setItem(CHECKIN_KEY_P2, JSON.stringify(updated)); } catch (_) {}
+      };
+
       const recordSyncTime = () => {
         const now = new Date().toISOString();
         setLastSyncedAt(now);
@@ -993,6 +1075,11 @@
                 <button onClick={onBack} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }}>
                   ALL PHASES
                 </button>
+                {wakeLockSupported && (
+                  <button onClick={toggleWakeLock} aria-pressed={wakeLockOn} style={{ background: wakeLockOn ? UI.warning : UI.black, border: `1px solid ${wakeLockOn ? UI.warning : UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: wakeLockOn ? UI.black : UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer", transition: UI.ease }}>
+                    {wakeLockOn ? "AWAKE ON" : "KEEP AWAKE"}
+                  </button>
+                )}
                 {!completed && isPhaseComplete() && (
                   <button onClick={() => {
                     if (confirmingPhaseAction !== "end") {
@@ -1296,6 +1383,29 @@
             })}
           </div>
 
+          {/* Rest timer — floating, hidden while the summary sheet is up */}
+          {!showSummary && (
+            <div aria-live="polite" style={{ position: "fixed", bottom: 16, right: 16, zIndex: 90, display: "flex", gap: 6, alignItems: "center", background: "rgba(0,0,0,0.94)", border: `1px solid ${restDone ? UI.accent : restEndsAt ? UI.warning : UI.borderVisible}`, borderRadius: 6, padding: "8px 10px" }}>
+              {restEndsAt ? (
+                <>
+                  <span style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 15, color: UI.warning, letterSpacing: "0.06em" }}>{fmtRest(restRemaining)}</span>
+                  <button aria-label="Cancel rest timer" onClick={() => setRestEndsAt(null)} style={{ background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 4, color: UI.disabled, fontSize: 12, cursor: "pointer", padding: "3px 8px", fontFamily: UI.mono }}>✕</button>
+                </>
+              ) : restDone ? (
+                <span style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 11, color: UI.accent, letterSpacing: "0.08em" }}>REST OVER — GO</span>
+              ) : (
+                <>
+                  <span style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.1em" }}>REST</span>
+                  {[120, 180, 240].map(s => (
+                    <button key={s} onClick={() => startRest(s)} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "4px 8px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.04em", cursor: "pointer", transition: UI.ease }}>
+                      {s / 60}:00
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Session Summary Bottom Sheet — P2 only */}
           {showSummary && (
             <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: UI.surface, borderTop: `1px solid ${UI.borderVisible}`, borderRadius: "14px 14px 0 0", padding: "20px 20px 40px", zIndex: 100, animation: "slideUp 0.25s cubic-bezier(0.25,0.1,0.25,1)" }}>
@@ -1331,6 +1441,27 @@
                   <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, marginTop: 2 }}>done</div>
                 </div>
               </div>
+              {/* Achilles check-in — 1 fine … 5 pain, per session, local-only */}
+              <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ fontFamily: UI.mono, fontSize: 9, color: UI.disabled, letterSpacing: "0.08em" }}>ACHILLES CHECK-IN · 1 FINE — 5 PAIN</div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[1, 2, 3, 4, 5].map(n => {
+                    const active = checkins[activeDay]?.[activeWeek] === n;
+                    const scoreColor = n <= 2 ? UI.success : n === 3 ? UI.warning : UI.accent;
+                    return (
+                      <button key={n} onClick={() => setCheckin(n)} aria-pressed={active} aria-label={`Achilles score ${n}`} style={{
+                        background: active ? scoreColor : UI.black,
+                        border: `1px solid ${active ? scoreColor : UI.borderVisible}`,
+                        borderRadius: 4, padding: "5px 9px", cursor: "pointer",
+                        color: active ? UI.black : UI.disabled,
+                        fontFamily: UI.mono, fontWeight: 700, fontSize: 11, transition: UI.ease,
+                      }}>
+                        {n}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -1342,21 +1473,9 @@
 
     // === INSIGHTS ===
 
-    // Parse a prescribed reps string into a usable rep count + per-side flag.
-    // Time-based (holds, "45s") and distance-based (carries, "20–30m") are not rep-counted.
-    function parseRepsMeta(repsStr) {
-      const s = String(repsStr || "").toLowerCase().trim();
-      const perSide = s.includes("/side") || s.includes("/leg") || s.includes("/arm");
-      if (/^\d+(\s*[–-]\s*\d+)?\s*s/.test(s)) return { reps: null, perSide };
-      if (/\d\s*m(\b|\/)/.test(s)) return { reps: null, perSide };
-      if (s.includes("burn") || s.includes("quality") || s.includes("—")) return { reps: null, perSide };
-      const m = s.match(/(\d+(?:\.\d+)?)(?:\s*[–-]\s*(\d+(?:\.\d+)?))?/);
-      if (!m) return { reps: null, perSide };
-      const top = m[2] ? parseFloat(m[2]) : parseFloat(m[1]); // top of a range
-      return { reps: isNaN(top) ? null : top, perSide };
-    }
-
-    const epley = (w, reps) => w * (1 + reps / 30);
+    // Reps parsing + Epley 1RM live in frontend/businessLogic.mjs (unit tested).
+    const parseRepsMeta = (repsStr) => window.BusinessLogic.parseRepsMeta(repsStr);
+    const epley = (w, reps) => window.BusinessLogic.epley(w, reps);
     const isDeloadWeek = (week) => week.includes("Deload");
 
     function MiniChart({ points }) {
@@ -1388,7 +1507,7 @@
 
     function Insights({ onBack }) {
       const [reps, setReps] = useState({});
-      const [data, setData] = useState({ weights: {}, rpe: {}, types: {}, favourites: {} });
+      const [data, setData] = useState({ weights: {}, rpe: {}, types: {}, favourites: {}, checkins: {} });
       const [wf, setWf] = useState({ weight: "", reps: "", sets: "1" });
 
       useEffect(() => {
@@ -1398,6 +1517,7 @@
           rpe: read(RPE_KEY_P2),
           types: read(TYPES_KEY_P2),
           favourites: read(FAVOURITES_KEY_P2),
+          checkins: read(CHECKIN_KEY_P2),
         });
         setReps(read(REPS_KEY_P2));
       }, []);
@@ -1472,6 +1592,32 @@
                 </div>
               </div>
             </div>
+
+            {/* Achilles check-in history */}
+            {Object.keys(data.checkins).length > 0 && (
+              <div style={cardBox}>
+                <div style={{ fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.1em", color: UI.secondary, marginBottom: 10 }}>ACHILLES CHECK-INS · 1 FINE — 5 PAIN</div>
+                {Object.entries(data.checkins).map(([day, byWeek]) => {
+                  const scores = Object.entries(byWeek).filter(([, v]) => v != null);
+                  if (!scores.length) return null;
+                  return (
+                    <div key={day} style={{ display: "flex", alignItems: "center", gap: 10, fontFamily: UI.mono, fontSize: 11, marginBottom: 6 }}>
+                      <span style={{ width: 84, color: UI.secondary }}>{day.toUpperCase()}</span>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {scores.map(([week, score]) => {
+                          const scoreColor = score <= 2 ? UI.success : score === 3 ? UI.warning : UI.accent;
+                          return (
+                            <span key={week} style={{ color: scoreColor, background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 3, padding: "3px 6px", fontSize: 10 }}>
+                              {week.replace(" (Deload)", " DL")} · {score}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {!favKeys.length && (
               <div style={{ fontFamily: UI.mono, fontSize: 11, lineHeight: 1.6, color: UI.disabled, padding: "0 2px 14px" }}>
@@ -1554,6 +1700,119 @@
       );
     }
 
+    // === PHASE 3: CROSS-PHASE ANALYSIS ===
+
+    function Analysis({ onBack }) {
+      const [store, setStore] = useState({ w1: {}, w2: {}, rpe2: {} });
+
+      useEffect(() => {
+        const read = (k) => { try { return JSON.parse(localStorage.getItem(k) || "{}"); } catch (_) { return {}; } };
+        setStore({ w1: read(STORAGE_KEY), w2: read(STORAGE_KEY_P2), rpe2: read(RPE_KEY_P2) });
+      }, []);
+
+      const matches = useMemo(() => window.AnalysisLogic.matchExercisesAcrossPhases(PROGRAM, PROGRAM_P2), []);
+
+      const cards = useMemo(() => matches.map(m => {
+        const reps1 = parseRepsMeta(m.p1.reps).reps;
+        const reps2 = parseRepsMeta(m.p2.reps).reps;
+        const s1 = window.AnalysisLogic.buildE1rmSeries({ weights: store.w1, key: m.p1.key, weeks: WEEKS, reps: reps1 });
+        const s2 = window.AnalysisLogic.buildE1rmSeries({ weights: store.w2, key: m.p2.key, weeks: WEEKS_P2, reps: reps2 });
+        const logged = [...s1, ...s2].filter(p => p.weight != null);
+        if (!logged.length) return null;
+        const rpeByWeek = store.rpe2[m.p2.key] || {};
+        const lastRpe = [...WEEKS_P2].reverse().map(w => rpeByWeek[w]).find(r => r !== undefined && r !== "") ?? null;
+        const bestOf = (s) => Math.max(...s.filter(p => !p.deload && p.e1rm != null).map(p => p.e1rm), 0);
+        const best1 = bestOf(s1), best2 = bestOf(s2);
+        const delta = best1 > 0 && best2 > 0 ? ((best2 - best1) / best1) * 100 : null;
+        return {
+          key: m.p2.key, name: m.p2.name,
+          points: [...s1, ...s2].map(p => ({ label: p.week, value: p.e1rm, deload: p.deload })),
+          best1, best2, delta,
+          plateau: window.AnalysisLogic.detectPlateau(s2, rpeByWeek),
+          seed: window.AnalysisLogic.suggestPhaseSeed(s2, lastRpe),
+        };
+      }).filter(Boolean), [matches, store]);
+
+      const exportAnalysisMd = () => {
+        const lines = [`# Cross-Phase Analysis`, `_Generated: ${new Date().toISOString().slice(0, 10)}_`, ``];
+        for (const c of cards) {
+          lines.push(`## ${c.name}`);
+          if (c.best1 > 0) lines.push(`- Phase 1 best e1RM: ${c.best1.toFixed(1)}kg`);
+          if (c.best2 > 0) lines.push(`- Phase 2 best e1RM: ${c.best2.toFixed(1)}kg`);
+          if (c.delta != null) lines.push(`- Change: ${c.delta >= 0 ? "+" : ""}${c.delta.toFixed(1)}%`);
+          if (c.plateau) lines.push(`- ⚠ PLATEAU: flat e1RM at high RPE — deload or change stimulus`);
+          if (c.seed) lines.push(`- Next-phase W1 seed: ${c.seed.w1}kg (${c.seed.note})`);
+          lines.push(``);
+        }
+        const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `analysis_${new Date().toISOString().slice(0, 10)}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const cardBox = { background: UI.surface, border: `1px solid ${UI.borderVisible}`, borderRadius: 6, padding: "14px", marginBottom: 12 };
+      const stat = (label, value, color) => (
+        <div>
+          <div style={{ fontFamily: UI.mono, fontSize: 9, letterSpacing: "0.1em", color: UI.disabled }}>{label}</div>
+          <div style={{ fontFamily: UI.mono, fontSize: 17, fontWeight: 700, color: color || UI.display, marginTop: 3 }}>{value}</div>
+        </div>
+      );
+
+      return (
+        <div style={{ fontFamily: UI.sans, minHeight: "100vh", color: UI.primary, paddingBottom: 80 }}>
+          <div style={{ background: "rgba(0,0,0,0.94)", borderBottom: `1px solid ${UI.border}`, padding: "20px 16px 18px", position: "sticky", top: 0, zIndex: 10 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                <div style={{ fontFamily: UI.displayFont, fontSize: 44, lineHeight: 0.9, letterSpacing: "-0.06em", color: UI.display }}>ANALYSIS</div>
+                <div style={{ paddingTop: 6, fontFamily: UI.mono, fontSize: 11, letterSpacing: "0.08em", color: UI.disabled }}>PHASE 1 × PHASE 2</div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={exportAnalysisMd} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  EXPORT (.md)
+                </button>
+                <button onClick={onBack} style={{ background: UI.black, border: `1px solid ${UI.borderVisible}`, borderRadius: 4, padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  ← HOME
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: "16px", maxWidth: 720, margin: "0 auto" }}>
+            {cards.length === 0 && (
+              <div style={{ fontFamily: UI.mono, fontSize: 12, color: UI.disabled, padding: "24px 0", textAlign: "center" }}>
+                No shared exercises with logged data across phases yet.
+              </div>
+            )}
+
+            {cards.map(c => (
+              <div key={c.key} style={cardBox}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: UI.display, letterSpacing: "-0.01em" }}>{c.name}</div>
+                  {c.plateau && (
+                    <span style={{ fontFamily: UI.mono, fontSize: 10, fontWeight: 700, color: UI.warning, background: "rgba(212,168,67,0.12)", border: `1px solid rgba(212,168,67,0.5)`, borderRadius: 3, padding: "3px 6px" }}>
+                      PLATEAU
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: 24, margin: "12px 0 4px", flexWrap: "wrap" }}>
+                  {stat("P1 BEST e1RM", c.best1 > 0 ? `${c.best1.toFixed(1)}kg` : "—")}
+                  {stat("P2 BEST e1RM", c.best2 > 0 ? `${c.best2.toFixed(1)}kg` : "—", UI.accent)}
+                  {c.delta != null && stat("CHANGE", `${c.delta >= 0 ? "+" : ""}${c.delta.toFixed(1)}%`, c.delta >= 0 ? UI.success : UI.accent)}
+                  {c.seed && stat("NEXT W1 SEED", `${c.seed.w1}kg`, c.seed.note === "up" ? UI.success : UI.warning)}
+                </div>
+
+                <MiniChart points={c.points} />
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     function App() {
       const [cloudUser, setCloudUser] = useState(null);
       const [authEmail, setAuthEmail] = useState("");
@@ -1626,6 +1885,9 @@
       }
       if (selectedPhase === "phase2" && phase1Completed) {
         return <Tracker config={PHASE_CONFIG.phase2} cloudUser={cloudUser} onBack={handleBack} completed={phase2Completed} setCompleted={setPhase2Completed} />;
+      }
+      if (selectedPhase === "phase3" && phase1Completed) {
+        return <Analysis onBack={handleBack} />;
       }
       return (
         <PhaseLanding

@@ -53,6 +53,7 @@ All phase differences are config, not code forks. `PHASE_CONFIG[phaseId]` provid
 | `phase2-rpe-v1` | Phase 2 RPE per exercise per week: `{ "Monday||Back squat": { W1: "8.5" } }` |
 | `phase2-favourites-v1` | Exercises pinned to Insights: `{ key: true }` |
 | `phase2-reps-v1` | Per-week reps overrides for Insights 1RM (time/distance exercises) |
+| `phase2-checkin-v1` | Achilles check-in scores `{ day: { week: 1–5 } }` — local-only, see `skills/workout-mode.md` |
 | `phase-tracker-last-phase` | Last opened phase — auto-reopen on load |
 | `phase1_completed` / `phase2_completed` | `"true"` when phase is frozen |
 | `phase1-migration-done` | One-time localStorage→Supabase migration flag |

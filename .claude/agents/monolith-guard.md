@@ -15,19 +15,26 @@ plan was rejected in favor of one config-driven `Tracker` component inside
 `index.html`, driven by a `PHASE_CONFIG` object. `CLAUDE.md` restates this as a
 hard constraint: no bundler, no component library, no `src/` tree, no
 `package.json` for the app itself (a `package.json` may exist solely for
-`node --test` tooling). The only sanctioned exception is pure business-logic
-extraction into `frontend/*.mjs` native ES modules.
+`node --test` tooling). The sanctioned exceptions are: pure business-logic
+extraction into `frontend/*.mjs` native ES modules; PWA static assets
+(`manifest.json`, `sw.js`, `icons/**` — see `docs/adr/0006-pwa-static-assets.md`);
+and dependency-free CI tooling under `scripts/**` (see
+`docs/adr/0005-stay-monolith-close-vite-question.md`).
 
 ## What to do
 
-1. Read `docs/adr/0001-single-file-monolith.md` in full.
+1. Read `docs/adr/0001-single-file-monolith.md` in full, plus ADRs 0005 and
+   0006 if the change touches PWA assets, `scripts/`, or re-raises the
+   bundler question.
 2. Look at the proposed change (files to be added/moved, dependencies to be
    introduced, or a description of the plan you're given).
 3. Classify it:
    - **Allowed as-is**: adds/edits code inside `index.html`, adds a new pure
      `.mjs` module for non-UI logic (matching the `businessLogic.mjs` /
-     `supabaseClient.mjs` pattern), or only touches test tooling
-     (`*.test.mjs`, `package.json` test script).
+     `supabaseClient.mjs` pattern), only touches test tooling
+     (`*.test.mjs`, `package.json` test script), touches PWA static assets
+     (`manifest.json`, `sw.js`, `icons/**` — ADR 0006), or adds
+     dependency-free CI scripts under `scripts/**` (ADR 0005).
    - **Blocked without a new ADR**: introduces a `src/` directory, JSX/TS
      files outside `index.html`, a bundler or dev-server build step, a UI
      component library, Tailwind or separate CSS files, or new npm

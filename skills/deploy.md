@@ -16,6 +16,12 @@ How this app ships. There is no build, no CI deploy pipeline, no bundler — del
 4. If styles changed, run the `design-consistency-reviewer` agent; if files were added/moved, run `monolith-guard`.
 5. After merge, hard-refresh the live URL (Pages caches aggressively) and log one value to verify Supabase round-trip.
 
+## PWA (ADR 0006)
+- `sw.js` uses network-first for own code, so normal deploys are picked up without action.
+- If you change the cached CDN assets (React/Babel/supabase-js URLs, fonts) or the icons, bump `CACHE_VERSION` in `sw.js` so installed clients drop the old cache.
+- The service worker does NOT register on localhost — test SW behavior only on the live Pages URL (or temporarily remove the hostname guard).
+- New `frontend/*.mjs` files must be added to the `APP_SHELL` list in `sw.js` for offline boot.
+
 ## Gotchas
 - **Everything on `main` root is live** — never push half-finished work to `main`; use a branch + PR.
 - CDN pins: React 18 and Babel 7.23.10 are version-pinned via unpkg; supabase-js is pinned to major v2 (`@supabase/supabase-js@2/+esm`) — patch/minor updates flow automatically, a breaking v3 cannot land silently.
