@@ -43,3 +43,5 @@ Run `npm test` (== `node --test frontend/*.test.mjs`) before changing any functi
 ## Local dev
 
 `.claude/launch.json` defines a `gym` server: `python -m http.server 8123`. Use the Preview tools against that, not a bundler dev server.
+
+Browser verification is delegated: use the `preview-verify` skill (`.claude/skills/preview-verify/`), which spawns a **haiku** subagent to drive the preview tools instead of the main model — cheaper, same result. Only probe the preview directly from the main session for one-off single checks.
