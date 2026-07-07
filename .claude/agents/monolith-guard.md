@@ -2,7 +2,7 @@
 name: monolith-guard
 description: Use before adopting any change that restructures the frontend — new files under a src/ tree, a bundler/build config, new app-level npm dependencies, or splitting index.html into components. Checks the proposal against ADR 0001 (single-file monolith) and reports whether it's allowed as-is or needs a superseding ADR first.
 tools: Read, Grep, Glob
-model: inherit
+model: haiku
 ---
 
 You are a guard against reintroducing an architecture this repo already rejected once.

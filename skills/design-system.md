@@ -70,7 +70,7 @@ background-size: 16px 16px;
 - Mobile-first, ~390px viewport
 - Page padding: `0 16px` horizontal
 - Sticky header: `padding: 20px 16px 18px`, `background: rgba(0,0,0,0.94)`, `zIndex: 10`
-- Card padding: `13px 14px`; card gap `8px`; section gap `32px`
+- Card padding: `13px 14px` (exercise cards); stat/insight cards (Insights, Analysis) use flat `14px`; card gap `8px`; section gap `32px`
 - Border radius: 4 (buttons/inputs/badges), 6 (cards), 3 (small badges)
 - Horizontal scroll containers (tabs, day selector): `overflowX: auto`, no wrapping
 
@@ -104,7 +104,7 @@ The 2px left border in section color is the "logged" signal. No box shadows.
   padding: "7px 10px", color: UI.secondary, fontFamily: UI.mono, fontWeight: 700,
   fontSize: 11, letterSpacing: "0.08em", cursor: "pointer" }
 ```
-Primary/destructive variant: solid `UI.accent` bg with `UI.black` text. Active toggle state: `UI.display` bg with `UI.black` text.
+Primary/destructive variant: solid `UI.accent` bg with `UI.black` text. Active toggle state: `UI.display` bg with `UI.black` text. Sanctioned exception: the KEEP AWAKE wake-lock toggle uses `UI.warning` bg when active — the amber is a deliberate caution cue (screen stays on, battery drains), not the standard toggle-active state; don't copy it for ordinary toggles.
 
 ### Inline confirm pattern
 Destructive actions (END PHASE, EDIT LOG) never use `window.confirm`. First tap swaps the label to `TAP AGAIN TO CONFIRM` with `UI.warning` background, auto-reverting after 3s; second tap executes.
