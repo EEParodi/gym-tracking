@@ -99,8 +99,10 @@ export function suggestPhaseSeed(series, lastRpe) {
 }
 
 // Expose a global for the non-module Babel/JSX script in index.html.
+// Named AnalysisLogic (not Analysis) — Babel's top-level `function Analysis`
+// component declaration becomes window.Analysis and would clobber this.
 if (typeof window !== "undefined") {
-  window.Analysis = {
+  window.AnalysisLogic = {
     normalizeExerciseName,
     matchExercisesAcrossPhases,
     buildE1rmSeries,

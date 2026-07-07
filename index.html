@@ -1710,13 +1710,13 @@
         setStore({ w1: read(STORAGE_KEY), w2: read(STORAGE_KEY_P2), rpe2: read(RPE_KEY_P2) });
       }, []);
 
-      const matches = useMemo(() => window.Analysis.matchExercisesAcrossPhases(PROGRAM, PROGRAM_P2), []);
+      const matches = useMemo(() => window.AnalysisLogic.matchExercisesAcrossPhases(PROGRAM, PROGRAM_P2), []);
 
       const cards = useMemo(() => matches.map(m => {
         const reps1 = parseRepsMeta(m.p1.reps).reps;
         const reps2 = parseRepsMeta(m.p2.reps).reps;
-        const s1 = window.Analysis.buildE1rmSeries({ weights: store.w1, key: m.p1.key, weeks: WEEKS, reps: reps1 });
-        const s2 = window.Analysis.buildE1rmSeries({ weights: store.w2, key: m.p2.key, weeks: WEEKS_P2, reps: reps2 });
+        const s1 = window.AnalysisLogic.buildE1rmSeries({ weights: store.w1, key: m.p1.key, weeks: WEEKS, reps: reps1 });
+        const s2 = window.AnalysisLogic.buildE1rmSeries({ weights: store.w2, key: m.p2.key, weeks: WEEKS_P2, reps: reps2 });
         const logged = [...s1, ...s2].filter(p => p.weight != null);
         if (!logged.length) return null;
         const rpeByWeek = store.rpe2[m.p2.key] || {};
@@ -1728,8 +1728,8 @@
           key: m.p2.key, name: m.p2.name,
           points: [...s1, ...s2].map(p => ({ label: p.week, value: p.e1rm, deload: p.deload })),
           best1, best2, delta,
-          plateau: window.Analysis.detectPlateau(s2, rpeByWeek),
-          seed: window.Analysis.suggestPhaseSeed(s2, lastRpe),
+          plateau: window.AnalysisLogic.detectPlateau(s2, rpeByWeek),
+          seed: window.AnalysisLogic.suggestPhaseSeed(s2, lastRpe),
         };
       }).filter(Boolean), [matches, store]);
 
