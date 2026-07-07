@@ -42,7 +42,7 @@ Tokens exist twice and must stay in sync: CSS variables in `:root` and the `UI` 
 | `success` | `--success` | `#4A9E5C` | Save/sync ok, RPE ≤ 7, "+kg" suggestions |
 | `warning` | `--warning` | `#D4A843` | Deload, favourites star, RPE 7–8.5, hold suggestions, confirm states |
 
-Translucent variants used inline: `rgba(215,25,33,0.15)` (error bg), `rgba(74,158,92,0.08)` (up-suggestion bg), `rgba(212,168,67,0.08–0.12)` (deload/hold/PR bg).
+Translucent variants used inline: `rgba(215,25,33,0.15)` (error bg), `rgba(74,158,92,0.08)` (up-suggestion bg), `rgba(212,168,67,0.08–0.12)` (deload/hold/PR bg), `rgba(212,168,67,0.5)` / `rgba(74,158,92,0.4)` (badge borders — PR, PLATEAU, suggestion chips). Translucent black scrim is always `rgba(0,0,0,0.94)`.
 
 ### Section accent colors
 Each section gets a color dot and logged-card left border:

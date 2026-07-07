@@ -1385,11 +1385,11 @@
 
           {/* Rest timer — floating, hidden while the summary sheet is up */}
           {!showSummary && (
-            <div aria-live="polite" style={{ position: "fixed", bottom: 16, right: 16, zIndex: 90, display: "flex", gap: 6, alignItems: "center", background: "rgba(0,0,0,0.92)", border: `1px solid ${restDone ? UI.accent : restEndsAt ? UI.warning : UI.borderVisible}`, borderRadius: 6, padding: "8px 10px" }}>
+            <div aria-live="polite" style={{ position: "fixed", bottom: 16, right: 16, zIndex: 90, display: "flex", gap: 6, alignItems: "center", background: "rgba(0,0,0,0.94)", border: `1px solid ${restDone ? UI.accent : restEndsAt ? UI.warning : UI.borderVisible}`, borderRadius: 6, padding: "8px 10px" }}>
               {restEndsAt ? (
                 <>
                   <span style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 15, color: UI.warning, letterSpacing: "0.06em" }}>{fmtRest(restRemaining)}</span>
-                  <button aria-label="Cancel rest timer" onClick={() => setRestEndsAt(null)} style={{ background: "none", border: `1px solid ${UI.border}`, borderRadius: 4, color: UI.disabled, fontSize: 12, cursor: "pointer", padding: "3px 8px", fontFamily: UI.mono }}>✕</button>
+                  <button aria-label="Cancel rest timer" onClick={() => setRestEndsAt(null)} style={{ background: UI.black, border: `1px solid ${UI.border}`, borderRadius: 4, color: UI.disabled, fontSize: 12, cursor: "pointer", padding: "3px 8px", fontFamily: UI.mono }}>✕</button>
                 </>
               ) : restDone ? (
                 <span style={{ fontFamily: UI.mono, fontWeight: 700, fontSize: 11, color: UI.accent, letterSpacing: "0.08em" }}>REST OVER — GO</span>
