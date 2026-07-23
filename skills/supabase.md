@@ -27,7 +27,10 @@ UNIQUE (user_id, day, exercise, week)
 ### `tracker_data_p2` (Phase 2)
 Same shape plus `rpe numeric(3,1)` (nullable — supports 8.5-style values).
 
-Both tables have RLS enabled with a single `auth.uid() = user_id` policy for all operations.
+### `tracker_data_rehab` (Rehab)
+Identical shape to `tracker_data_p2` (with `rpe`). DDL in [`sql/create_tracker_data_rehab.sql`](../sql/create_tracker_data_rehab.sql). The app reuses the P2 row converters for it — see `docs/adr/0007-rehab-phase.md`. Must be created in Supabase before rehab cloud sync works; until then rehab runs offline via localStorage.
+
+All three tables have RLS enabled with a single `auth.uid() = user_id` policy for all operations.
 
 > Historical note: an earlier plan used a key/value JSONB table — it never shipped. The columnar layout was chosen so rows are directly queryable/exportable.
 
@@ -48,11 +51,13 @@ Both tables have RLS enabled with a single `auth.uid() = user_id` policy for all
 - Rows missing `day`, `exercise`, or `week` are silently skipped on hydrate.
 
 ## Read/write functions (per phase, selected via `PHASE_CONFIG.hydrateFn/upsertFn/migrateFn`)
-| Phase 1 | Phase 2 |
-|---|---|
-| `hydrateTrackerStateFromSupabase(userId)` | `hydrateP2TrackerState(userId)` |
-| `upsertTrackerStateToSupabase({userId, weights, types, metaByKey})` | `upsertP2TrackerState({..., rpeLog})` |
-| `migrateLocalToSupabaseIfNeeded(userId)` | — (no migration needed) |
+| Phase 1 | Phase 2 | Rehab |
+|---|---|---|
+| `hydrateTrackerStateFromSupabase(userId)` | `hydrateP2TrackerState(userId)` | `hydrateRehabTrackerState(userId)` |
+| `upsertTrackerStateToSupabase({userId, weights, types, metaByKey})` | `upsertP2TrackerState({..., rpeLog})` | `upsertRehabTrackerState({..., rpeLog})` |
+| `migrateLocalToSupabaseIfNeeded(userId)` | — (no migration needed) | — (no migration needed) |
+
+Rehab's helpers hit `tracker_data_rehab` but reuse the Phase 2 converters (`localStateToRowsP2` / `rowsToP2State`) — same row shape.
 
 All upserts use `onConflict: "user_id,day,exercise,week"` — re-syncing is idempotent, last write wins.
 
