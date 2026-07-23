@@ -81,6 +81,7 @@
     const DAYS = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5 (Optional)"];
     const WEEKS = ["W1", "W2", "W3", "W4", "W5 (Deload)"];
     const WEEKS_P2 = ["W1", "W2", "W3", "W4", "W5 (Deload)", "W6", "W7", "W8 (Deload)"];
+    const WEEKS_REHAB = ["W1", "W2", "W3", "W4"]; // Rehab: 4 progressive weeks, no deload
 
     const PROGRAM = {
       "Day 1": [
@@ -207,6 +208,69 @@
       ],
     };
 
+    // Phase REHAB — 4-week Achilles rehab mod. Mon/Tue/Thu/Fri split, weight + RPE logging,
+    // no deload weeks. Sections reuse SECTION_COLORS keys; no per-exercise RPE targets or
+    // suggested-weight seeds in the source plan (rpe "—" = log actual, no target shown).
+    const PROGRAM_REHAB = {
+      "Monday": [
+        { section: "WARM UP", name: "Ankle mobility (knee-to-wall)", sets: 1, reps: "1 min/side", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Tibialis raises", sets: 3, reps: "15", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Copenhagen plank hold", sets: 2, reps: "20–30s/side", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "SL glute bridge", sets: 2, reps: "12/side", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Sliding leg curl", sets: 3, reps: "5", rpe: "—", cue: "" },
+        { section: "SQUAT", name: "Back squat", sets: 4, reps: "5", rpe: "—", cue: "" },
+        { section: "UNI", name: "Bulgarian split squat", sets: 4, reps: "8/leg", rpe: "—", cue: "" },
+        { section: "CALF", name: "Calf isometric hold", sets: 5, reps: "30–45s", rpe: "—", cue: "" },
+        { section: "CALF", name: "Leg press calf raise", sets: 4, reps: "8–12", rpe: "—", cue: "" },
+        { section: "CALF", name: "Seated calf raise", sets: 4, reps: "10–12", rpe: "—", cue: "" },
+        { section: "CORE", name: "Ab wheel rollout", sets: 3, reps: "12", rpe: "—", cue: "" },
+        { section: "NECK", name: "Neck plank ISO", sets: 2, reps: "15s/side", rpe: "—", cue: "" },
+      ],
+      "Tuesday": [
+        { section: "WARM UP", name: "Face pulls", sets: 2, reps: "15", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Band pull-aparts", sets: 2, reps: "20", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "KB Halo", sets: 2, reps: "10", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Scapular push-ups", sets: 2, reps: "12", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Push-up to down dog", sets: 2, reps: "8", rpe: "—", cue: "" },
+        { section: "PRESS", name: "Barbell bench press", sets: 4, reps: "5–6", rpe: "—", cue: "" },
+        { section: "ROW", name: "Pendlay row", sets: 4, reps: "6", rpe: "—", cue: "" },
+        { section: "ROW", name: "DB chest-supported row", sets: 2, reps: "10", rpe: "—", cue: "" },
+        { section: "CHEST", name: "Smith incline press", sets: 4, reps: "10", rpe: "—", cue: "" },
+        { section: "NECK", name: "Neck flexion", sets: 3, reps: "12", rpe: "—", cue: "" },
+        { section: "ARMS", name: "EZ bar curl", sets: 3, reps: "12", rpe: "—", cue: "" },
+        { section: "ARMS", name: "Skullcrushers", sets: 3, reps: "12", rpe: "—", cue: "" },
+        { section: "ARMS", name: "DB lateral raise", sets: 3, reps: "15", rpe: "—", cue: "" },
+      ],
+      "Thursday": [
+        { section: "WARM UP", name: "Hip 90/90", sets: 2, reps: "1 min", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "SL glute bridge", sets: 2, reps: "12/side", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Lateral lunges", sets: 2, reps: "8/side", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Copenhagen plank hold", sets: 2, reps: "20–30s/side", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Band Pallof hold", sets: 2, reps: "10s/side", rpe: "—", cue: "" },
+        { section: "HINGE", name: "Conventional barbell DL", sets: 4, reps: "4–5", rpe: "—", cue: "" },
+        { section: "UNI", name: "Single leg press", sets: 4, reps: "10", rpe: "—", cue: "" },
+        { section: "HAMS", name: "Romanian DL", sets: 2, reps: "10", rpe: "—", cue: "" },
+        { section: "CALF", name: "Standing calf raise", sets: 3, reps: "10", rpe: "—", cue: "" },
+        { section: "CORE", name: "Landmine rotation", sets: 3, reps: "8/side", rpe: "—", cue: "" },
+        { section: "CORE", name: "Dead bug weighted", sets: 3, reps: "6/side", rpe: "—", cue: "" },
+        { section: "CALF", name: "Tibialis raises", sets: 3, reps: "20", rpe: "—", cue: "" },
+      ],
+      "Friday": [
+        { section: "WARM UP", name: "Band pull-aparts", sets: 2, reps: "20", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Dowel overhead reach", sets: 2, reps: "10", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Thread the needle", sets: 2, reps: "5/side", rpe: "—", cue: "" },
+        { section: "WARM UP", name: "Dead hang", sets: 2, reps: "30–45s", rpe: "—", cue: "" },
+        { section: "PRESS", name: "Seated shoulder press", sets: 4, reps: "8", rpe: "—", cue: "" },
+        { section: "PULL", name: "Lat pulldown", sets: 4, reps: "10", rpe: "—", cue: "" },
+        { section: "PRESS", name: "Close grip bench", sets: 4, reps: "8", rpe: "—", cue: "" },
+        { section: "ROW", name: "Single-arm cable row", sets: 4, reps: "10", rpe: "—", cue: "" },
+        { section: "NECK", name: "Neck extension", sets: 3, reps: "12", rpe: "—", cue: "" },
+        { section: "ARMS", name: "Tricep pushdown", sets: 3, reps: "14–16", rpe: "—", cue: "" },
+        { section: "ARMS", name: "Hammer curls", sets: 3, reps: "12", rpe: "—", cue: "" },
+        { section: "ARMS", name: "Barbell shrug", sets: 3, reps: "15", rpe: "—", cue: "" },
+      ],
+    };
+
     const SECTION_COLORS = {
       "WARM UP": "#4b5563", "PLYO": "#7c3aed", "SQUAT": "#d97706",
       "HAMS": "#d97706", "HINGE": "#d97706", "UNI": "#d97706",
@@ -228,6 +292,12 @@
       )
     );
 
+    const TRACKER_META_REHAB = Object.fromEntries(
+      Object.entries(PROGRAM_REHAB).flatMap(([day, exercises]) =>
+        exercises.map(ex => [`${day}||${ex.name}`, { section: ex.section, sets: ex.sets, reps: ex.reps }])
+      )
+    );
+
     // === STORAGE KEYS ===
     const STORAGE_KEY      = "phase1-tracker-v1";
     const TYPES_KEY        = "phase1-types-v1";
@@ -237,11 +307,15 @@
     const FAVOURITES_KEY_P2 = "phase2-favourites-v1";
     const REPS_KEY_P2      = "phase2-reps-v1";
     const CHECKIN_KEY_P2   = "phase2-checkin-v1";
+    const STORAGE_KEY_REHAB = "rehab-tracker-v1";
+    const TYPES_KEY_REHAB   = "rehab-types-v1";
+    const RPE_KEY_REHAB     = "rehab-rpe-v1";
     const LAST_PHASE_KEY   = "phase-tracker-last-phase";
 
     const PHASES = [
       { id: "phase1", label: "PHASE 1", status: "ACTIVE", description: "Current training tracker. Weeks, days, weights, cues, notes." },
       { id: "phase2", label: "PHASE 2", status: "READY", description: "Continues training with RPE logging per set. Unlocks after Phase 1." },
+      { id: "rehab", label: "REHAB", status: "MOD", description: "4-week Achilles rehab mod. Weight + RPE per set. Always available." },
       { id: "phase3", label: "PHASE 3", status: "ANALYSIS", description: "Cross-phase review: e1RM trends, plateau flags, and seeds for the next program." },
     ];
 
@@ -370,7 +444,7 @@
       );
     }
 
-    function PhaseLanding({ onSelect, cloudUser, authEmail, setAuthEmail, authStatus, onLogin, phase1Completed, onInsights }) {
+    function PhaseLanding({ onSelect, cloudUser, authEmail, setAuthEmail, authStatus, onLogin, phase1Completed, rehabCompleted, onInsights }) {
       return (
         <div style={{ minHeight: "100vh", padding: "28px 16px 64px", color: UI.primary, fontFamily: UI.sans }}>
           <div style={{ maxWidth: 720, margin: "0 auto" }}>
@@ -385,8 +459,10 @@
                 const isPhase1 = phase.id === "phase1";
                 const isPhase2 = phase.id === "phase2";
                 const isPhase3 = phase.id === "phase3";
-                const isComplete = isPhase1 && phase1Completed;
+                const isRehab = phase.id === "rehab";
+                const isComplete = (isPhase1 && phase1Completed) || (isRehab && rehabCompleted);
                 const canOpen =
+                  isRehab || // Rehab is always available, independent of phase gating
                   (isPhase1 && (!!cloudUser || phase1Completed)) ||
                   ((isPhase2 || isPhase3) && phase1Completed);
                 const isPending = (isPhase2 || isPhase3) && !phase1Completed;
@@ -549,13 +625,25 @@
         upsertFn: "upsertP2TrackerState",
         migrateFn: null,
       },
+      rehab: {
+        label: "REHAB",
+        program: PROGRAM_REHAB, weeks: WEEKS_REHAB, meta: TRACKER_META_REHAB,
+        storageKey: STORAGE_KEY_REHAB, typesKey: TYPES_KEY_REHAB, rpeKey: RPE_KEY_REHAB,
+        completedKey: "rehab_completed", phaseKey: "rehab",
+        optionalDay: null, defaultDay: "Monday",
+        dayLabel: d => d.toUpperCase(),
+        hasRPE: true, hasNotes: false,
+        hydrateFn: "hydrateRehabTrackerState",
+        upsertFn: "upsertRehabTrackerState",
+        migrateFn: null,
+      },
     };
 
     function generateProgressMarkdown() {
       const lines = [`# Training Progress`, `_Generated: ${new Date().toISOString().slice(0, 10)}_`];
       let anyPhase = false;
 
-      for (const id of ["phase1", "phase2"]) {
+      for (const id of ["phase1", "phase2", "rehab"]) {
         const config = PHASE_CONFIG[id];
         let weights = {}, types = {}, rpeLog = {};
         try {
@@ -1826,6 +1914,9 @@
       const [phase2Completed, setPhase2Completed] = useState(() => {
         try { return localStorage.getItem("phase2_completed") === "true"; } catch (_) { return false; }
       });
+      const [rehabCompleted, setRehabCompleted] = useState(() => {
+        try { return localStorage.getItem("rehab_completed") === "true"; } catch (_) { return false; }
+      });
       const [showInsights, setShowInsights] = useState(false);
 
       // Resolve Supabase session on mount
@@ -1889,6 +1980,9 @@
       if (selectedPhase === "phase3" && phase1Completed) {
         return <Analysis onBack={handleBack} />;
       }
+      if (selectedPhase === "rehab") {
+        return <Tracker config={PHASE_CONFIG.rehab} cloudUser={cloudUser} onBack={handleBack} completed={rehabCompleted} setCompleted={setRehabCompleted} />;
+      }
       return (
         <PhaseLanding
           onSelect={openPhase}
@@ -1898,6 +1992,7 @@
           authStatus={authStatus}
           onLogin={sendLoginLink}
           phase1Completed={phase1Completed}
+          rehabCompleted={rehabCompleted}
           onInsights={() => setShowInsights(true)}
         />
       );

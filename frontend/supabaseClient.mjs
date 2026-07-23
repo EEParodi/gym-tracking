@@ -169,6 +169,35 @@ export async function upsertP2TrackerState({ userId, weights, types, rpeLog, met
   return client.from("tracker_data_p2").upsert(rows, { onConflict: "user_id,day,exercise,week" });
 }
 
+// === Rehab helpers (tracker_data_rehab) ===
+// Same row shape and RPE support as Phase 2, so the P2 converters are reused directly.
+// Only the target table differs. No migration path — rehab is a fresh, always-available phase.
+
+export async function fetchAllDataForUserRehab(userId) {
+  if (!userId) return { data: [], error: new Error("Missing userId") };
+  const client = getClient();
+  const { data, error } = await client
+    .from("tracker_data_rehab")
+    .select("date, week, day, section, exercise, sets, reps, weight, rpe, type, notes, updated_at")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: true });
+  return { data, error };
+}
+
+export async function hydrateRehabTrackerState(userId) {
+  const { data, error } = await fetchAllDataForUserRehab(userId);
+  if (error) return { weights: {}, types: {}, rpeLog: {}, error };
+  return { ...rowsToP2State(data), error: null };
+}
+
+export async function upsertRehabTrackerState({ userId, weights, types, rpeLog, metaByKey }) {
+  if (!userId) return { data: null, error: new Error("Missing userId") };
+  const client = getClient();
+  const rows = localStateToRowsP2(weights, types, rpeLog, userId, metaByKey);
+  if (!rows.length) return { data: [], error: null };
+  return client.from("tracker_data_rehab").upsert(rows, { onConflict: "user_id,day,exercise,week" });
+}
+
 export const api = {
   initClient,
   loginWithEmailPassword,
@@ -187,6 +216,9 @@ export const api = {
   fetchAllDataForUserP2,
   hydrateP2TrackerState,
   upsertP2TrackerState,
+  fetchAllDataForUserRehab,
+  hydrateRehabTrackerState,
+  upsertRehabTrackerState,
 };
 
 // expose a global for non-module consumers (like the current index.html script)
